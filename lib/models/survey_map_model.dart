@@ -1,0 +1,515 @@
+import 'dart:math';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import 'annotation_models.dart';
+
+class SurveyMapModel extends ChangeNotifier {
+  // PDF data
+  Uint8List? _pdfBytes;
+  ui.Image? _pdfImage;
+  Size _pdfSize = Size.zero;
+
+  // Transformation state
+  double _rotation = 0;
+  double _scale = 1.0;
+  Offset _offset = Offset.zero;
+
+  // Annotations
+  final List<SmearAnnotation> _smears = [];
+  final List<DoseRateAnnotation> _doseRates = [];
+  final List<BoundaryAnnotation> _boundaries = [];
+  final List<EquipmentAnnotation> _equipment = [];
+
+  // Smear ID counter
+  int _nextSmearId = 1;
+
+  // Current tool
+  ToolType _currentTool = ToolType.none;
+
+  // Current boundary being drawn
+  BoundaryAnnotation? _currentBoundary;
+
+  // Dose rate controls
+  double _doseValue = 100;
+  String _doseUnit = 'μR/hr';
+  DoseType _doseType = DoseType.gamma;
+
+  // Icon selection and resizing
+  EquipmentAnnotation? _selectedIcon;
+  bool _isResizing = false;
+  ResizeHandle? _resizeHandle;
+
+  // Icon library
+  final List<IconMetadata> _iconLibrary = [];
+  String _iconSearchQuery = '';
+  IconCategory? _iconCategoryFilter;
+
+  // Getters
+  Uint8List? get pdfBytes => _pdfBytes;
+  ui.Image? get pdfImage => _pdfImage;
+  Size get pdfSize => _pdfSize;
+  double get rotation => _rotation;
+  double get scale => _scale;
+  Offset get offset => _offset;
+  List<SmearAnnotation> get smears => List.unmodifiable(_smears);
+  List<DoseRateAnnotation> get doseRates => List.unmodifiable(_doseRates);
+  List<BoundaryAnnotation> get boundaries => List.unmodifiable(_boundaries);
+  List<EquipmentAnnotation> get equipment => List.unmodifiable(_equipment);
+  int get nextSmearId => _nextSmearId;
+  ToolType get currentTool => _currentTool;
+  BoundaryAnnotation? get currentBoundary => _currentBoundary;
+  double get doseValue => _doseValue;
+  String get doseUnit => _doseUnit;
+  DoseType get doseType => _doseType;
+  EquipmentAnnotation? get selectedIcon => _selectedIcon;
+  bool get isResizing => _isResizing;
+  ResizeHandle? get resizeHandle => _resizeHandle;
+  List<IconMetadata> get iconLibrary => List.unmodifiable(_iconLibrary);
+  String get iconSearchQuery => _iconSearchQuery;
+  IconCategory? get iconCategoryFilter => _iconCategoryFilter;
+
+  bool get hasPdf => _pdfImage != null;
+
+  // Filtered icons
+  List<IconMetadata> get filteredIcons {
+    return _iconLibrary.where((icon) {
+      final matchesSearch = _iconSearchQuery.isEmpty ||
+          icon.keywords.any((keyword) =>
+              keyword.toLowerCase().contains(_iconSearchQuery.toLowerCase()));
+      final matchesCategory =
+          _iconCategoryFilter == null || icon.category == _iconCategoryFilter;
+      return matchesSearch && matchesCategory;
+    }).toList();
+  }
+
+  // PDF loading
+  void setPdfBytes(Uint8List bytes) {
+    _pdfBytes = bytes;
+    notifyListeners();
+  }
+
+  void setPdfImage(ui.Image image) {
+    _pdfImage = image;
+    _pdfSize = Size(image.width.toDouble(), image.height.toDouble());
+    notifyListeners();
+  }
+
+  // Transformation methods
+  void setRotation(double value) {
+    _rotation = value;
+    notifyListeners();
+  }
+
+  void setScale(double value) {
+    _scale = value;
+    notifyListeners();
+  }
+
+  void setOffset(Offset value) {
+    _offset = value;
+    notifyListeners();
+  }
+
+  void updateOffset(Offset delta) {
+    _offset += delta;
+    notifyListeners();
+  }
+
+  void zoom(double delta, Offset focalPoint, Size canvasSize) {
+    const zoomIntensity = 0.1;
+    final scaleFactor = 1 + delta * zoomIntensity;
+
+    // Position of the focal point relative to the transformed page
+    final worldX = (focalPoint.dx - _offset.dx) / _scale;
+    final worldY = (focalPoint.dy - _offset.dy) / _scale;
+
+    _scale *= scaleFactor;
+    _scale = _scale.clamp(0.1, 5.0);
+
+    // Adjust offset to keep the point under focus stationary
+    _offset = Offset(
+      focalPoint.dx - worldX * _scale,
+      focalPoint.dy - worldY * _scale,
+    );
+
+    notifyListeners();
+  }
+
+  void resetView(Size canvasSize) {
+    if (_pdfSize == Size.zero) return;
+
+    // Calculate scale to fit
+    final scaleX = canvasSize.width / _pdfSize.width;
+    final scaleY = canvasSize.height / _pdfSize.height;
+    _scale = (scaleX < scaleY ? scaleX : scaleY) * 0.95;
+
+    // Center the page
+    _offset = Offset(
+      (canvasSize.width - (_pdfSize.width * _scale)) / 2,
+      (canvasSize.height - (_pdfSize.height * _scale)) / 2,
+    );
+
+    _rotation = 0;
+    notifyListeners();
+  }
+
+  // Tool management
+  void setTool(ToolType tool) {
+    if (_currentTool == tool) {
+      _currentTool = ToolType.none;
+      if (tool == ToolType.boundary) {
+        finishCurrentBoundary();
+      }
+    } else {
+      _currentTool = tool;
+      if (_currentTool != ToolType.boundary) {
+        finishCurrentBoundary();
+      }
+    }
+    notifyListeners();
+  }
+
+  void clearTool() {
+    _currentTool = ToolType.none;
+    notifyListeners();
+  }
+
+  // Smear methods
+  void addSmear(Offset position) {
+    _smears.add(SmearAnnotation(
+      id: _nextSmearId++,
+      position: position,
+    ));
+    notifyListeners();
+  }
+
+  void removeSmear(SmearAnnotation smear) {
+    _smears.remove(smear);
+    renumberSmears();
+    notifyListeners();
+  }
+
+  void updateSmearPosition(SmearAnnotation smear, Offset newPosition) {
+    final index = _smears.indexOf(smear);
+    if (index != -1) {
+      _smears[index] = smear.copyWith(position: newPosition);
+      notifyListeners();
+    }
+  }
+
+  void renumberSmears() {
+    _smears.sort((a, b) => a.id.compareTo(b.id));
+    for (int i = 0; i < _smears.length; i++) {
+      _smears[i] = _smears[i].copyWith(id: i + 1);
+    }
+    _nextSmearId = _smears.length + 1;
+  }
+
+  SmearAnnotation? getSmearAtPosition(Offset position, double threshold) {
+    for (final smear in _smears.reversed) {
+      final distance = (smear.position - position).distance;
+      if (distance < threshold) {
+        return smear;
+      }
+    }
+    return null;
+  }
+
+  // Dose rate methods
+  void setDoseValue(double value) {
+    _doseValue = value;
+    notifyListeners();
+  }
+
+  void setDoseUnit(String unit) {
+    _doseUnit = unit;
+    notifyListeners();
+  }
+
+  void setDoseType(DoseType type) {
+    _doseType = type;
+    notifyListeners();
+  }
+
+  void addDoseRate(Offset position) {
+    _doseRates.add(DoseRateAnnotation(
+      position: position,
+      value: _doseValue,
+      unit: _doseUnit,
+      type: _doseType,
+    ));
+    notifyListeners();
+  }
+
+  void removeDoseRate(DoseRateAnnotation doseRate) {
+    _doseRates.remove(doseRate);
+    notifyListeners();
+  }
+
+  DoseRateAnnotation? getDoseRateAtPosition(Offset position, double threshold) {
+    for (final doseRate in _doseRates.reversed) {
+      final distance = (doseRate.position - position).distance;
+      if (distance < threshold) {
+        return doseRate;
+      }
+    }
+    return null;
+  }
+
+  // Boundary methods
+  void addBoundaryPoint(Offset position) {
+    if (_currentBoundary == null) {
+      _currentBoundary = BoundaryAnnotation(
+        points: [position],
+        id: DateTime.now().millisecondsSinceEpoch,
+      );
+    } else {
+      _currentBoundary!.points.add(position);
+    }
+    notifyListeners();
+  }
+
+  void removeLastBoundaryPoint() {
+    if (_currentBoundary != null && _currentBoundary!.points.isNotEmpty) {
+      _currentBoundary!.points.removeLast();
+      if (_currentBoundary!.points.isEmpty) {
+        _currentBoundary = null;
+      }
+      notifyListeners();
+    }
+  }
+
+  void finishCurrentBoundary() {
+    if (_currentBoundary != null && _currentBoundary!.points.length > 1) {
+      _boundaries.add(_currentBoundary!);
+    }
+    _currentBoundary = null;
+    notifyListeners();
+  }
+
+  void deleteBoundary(BoundaryAnnotation boundary) {
+    _boundaries.remove(boundary);
+    notifyListeners();
+  }
+
+  BoundaryAnnotation? getBoundaryAtPosition(Offset position, double threshold) {
+    for (final boundary in _boundaries.reversed) {
+      if (boundary.points.length < 2) continue;
+
+      for (int i = 0; i < boundary.points.length - 1; i++) {
+        final p1 = boundary.points[i];
+        final p2 = boundary.points[i + 1];
+        final distance = _distanceToLineSegment(position, p1, p2);
+        if (distance <= threshold) {
+          return boundary;
+        }
+      }
+    }
+    return null;
+  }
+
+  double _distanceToLineSegment(Offset p, Offset p1, Offset p2) {
+    final a = p.dx - p1.dx;
+    final b = p.dy - p1.dy;
+    final c = p2.dx - p1.dx;
+    final d = p2.dy - p1.dy;
+
+    final dot = a * c + b * d;
+    final lenSq = c * c + d * d;
+
+    if (lenSq == 0) {
+      return (p - p1).distance;
+    }
+
+    double param = dot / lenSq;
+    param = param.clamp(0.0, 1.0);
+
+    final xx = p1.dx + param * c;
+    final yy = p1.dy + param * d;
+
+    final dx = p.dx - xx;
+    final dy = p.dy - yy;
+
+    return sqrt(dx * dx + dy * dy);
+  }
+
+  // Equipment methods
+  void addEquipment(EquipmentAnnotation equipment) {
+    _equipment.add(equipment);
+    notifyListeners();
+  }
+
+  void removeEquipment(EquipmentAnnotation equipment) {
+    _equipment.remove(equipment);
+    if (_selectedIcon == equipment) {
+      _selectedIcon = null;
+    }
+    notifyListeners();
+  }
+
+  void updateEquipmentPosition(
+      EquipmentAnnotation equipment, Offset newPosition) {
+    final index = _equipment.indexOf(equipment);
+    if (index != -1) {
+      _equipment[index] = equipment.copyWith(position: newPosition);
+      notifyListeners();
+    }
+  }
+
+  void updateEquipmentSize(
+      EquipmentAnnotation equipment, double width, double height) {
+    final index = _equipment.indexOf(equipment);
+    if (index != -1) {
+      _equipment[index] =
+          equipment.copyWith(width: width, height: height);
+      notifyListeners();
+    }
+  }
+
+  EquipmentAnnotation? getEquipmentAtPosition(Offset position) {
+    for (final equipment in _equipment.reversed) {
+      final halfWidth = equipment.width / 2;
+      final halfHeight = equipment.height / 2;
+      if (position.dx >= equipment.position.dx - halfWidth &&
+          position.dx <= equipment.position.dx + halfWidth &&
+          position.dy >= equipment.position.dy - halfHeight &&
+          position.dy <= equipment.position.dy + halfHeight) {
+        return equipment;
+      }
+    }
+    return null;
+  }
+
+  // Icon selection
+  void selectIcon(EquipmentAnnotation? icon) {
+    _selectedIcon = icon;
+    notifyListeners();
+  }
+
+  void startResize(ResizeHandle handle) {
+    _isResizing = true;
+    _resizeHandle = handle;
+    notifyListeners();
+  }
+
+  void endResize() {
+    _isResizing = false;
+    _resizeHandle = null;
+    notifyListeners();
+  }
+
+  ResizeHandle? getResizeHandleAtPosition(
+      EquipmentAnnotation equipment, Offset position, double scale) {
+    final halfWidth = equipment.width / 2;
+    final halfHeight = equipment.height / 2;
+    final handleSize = 8 / scale;
+    final margin = 5 / scale;
+
+    final handles = {
+      ResizeHandle.nw: Offset(
+          equipment.position.dx - halfWidth - margin,
+          equipment.position.dy - halfHeight - margin),
+      ResizeHandle.ne: Offset(
+          equipment.position.dx + halfWidth + margin,
+          equipment.position.dy - halfHeight - margin),
+      ResizeHandle.sw: Offset(
+          equipment.position.dx - halfWidth - margin,
+          equipment.position.dy + halfHeight + margin),
+      ResizeHandle.se: Offset(
+          equipment.position.dx + halfWidth + margin,
+          equipment.position.dy + halfHeight + margin),
+    };
+
+    for (final entry in handles.entries) {
+      if ((position - entry.value).distance < handleSize) {
+        return entry.key;
+      }
+    }
+    return null;
+  }
+
+  // Icon library
+  void setIconLibrary(List<IconMetadata> icons) {
+    _iconLibrary.clear();
+    _iconLibrary.addAll(icons);
+    notifyListeners();
+  }
+
+  void setIconSearchQuery(String query) {
+    _iconSearchQuery = query;
+    notifyListeners();
+  }
+
+  void setIconCategoryFilter(IconCategory? category) {
+    _iconCategoryFilter = category;
+    notifyListeners();
+  }
+
+  // Clear all
+  void clearAllAnnotations() {
+    _smears.clear();
+    _doseRates.clear();
+    _boundaries.clear();
+    _equipment.clear();
+    _currentBoundary = null;
+    _nextSmearId = 1;
+    _selectedIcon = null;
+    notifyListeners();
+  }
+
+  // Coordinate transformations
+  Offset canvasToPage(Offset canvasPoint) {
+    if (_rotation == 0) {
+      return Offset(
+        (canvasPoint.dx - _offset.dx) / _scale,
+        (canvasPoint.dy - _offset.dy) / _scale,
+      );
+    } else {
+      final centerX = _pdfSize.width / 2;
+      final centerY = _pdfSize.height / 2;
+
+      double x = (canvasPoint.dx - _offset.dx) / _scale;
+      double y = (canvasPoint.dy - _offset.dy) / _scale;
+
+      x -= centerX;
+      y -= centerY;
+
+      final radians = -_rotation * 3.14159265359 / 180;
+      final cosValue = cos(radians);
+      final sinValue = sin(radians);
+
+      return Offset(
+        x * cosValue - y * sinValue + centerX,
+        x * sinValue + y * cosValue + centerY,
+      );
+    }
+  }
+
+  Offset pageToCanvas(Offset pagePoint) {
+    if (_rotation == 0) {
+      return Offset(
+        pagePoint.dx * _scale + _offset.dx,
+        pagePoint.dy * _scale + _offset.dy,
+      );
+    } else {
+      final centerX = _pdfSize.width / 2;
+      final centerY = _pdfSize.height / 2;
+
+      double x = pagePoint.dx - centerX;
+      double y = pagePoint.dy - centerY;
+
+      final radians = _rotation * 3.14159265359 / 180;
+      final cosValue = cos(radians);
+      final sinValue = sin(radians);
+
+      final rotatedX = x * cosValue - y * sinValue + centerX;
+      final rotatedY = x * sinValue + y * cosValue + centerY;
+
+      return Offset(
+        rotatedX * _scale + _offset.dx,
+        rotatedY * _scale + _offset.dy,
+      );
+    }
+  }
+}
