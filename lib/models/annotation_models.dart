@@ -213,16 +213,20 @@ enum EquipmentType {
 class IconMetadata {
   final String file;
   final String name;
-  final String svgText;
+  final String? svgText;
+  final String? assetPath;
   final IconCategory category;
   final List<String> keywords;
+  final dynamic metadata; // For PostingMetadata or other custom data
 
   IconMetadata({
     required this.file,
     required this.name,
-    required this.svgText,
+    this.svgText,
+    this.assetPath,
     required this.category,
     required this.keywords,
+    this.metadata,
   });
 }
 
@@ -233,6 +237,7 @@ enum IconCategory {
   contamination,
   restricted,
   equipment,
+  posting,
   other,
 }
 
@@ -251,6 +256,8 @@ extension IconCategoryExtension on IconCategory {
         return 'Restricted Areas';
       case IconCategory.equipment:
         return 'Equipment';
+      case IconCategory.posting:
+        return 'Postings';
       case IconCategory.other:
         return 'Other';
     }
@@ -270,6 +277,8 @@ extension IconCategoryExtension on IconCategory {
         return Colors.brown;
       case IconCategory.equipment:
         return Colors.green;
+      case IconCategory.posting:
+        return Colors.yellow;
       case IconCategory.other:
         return Colors.blueGrey;
     }

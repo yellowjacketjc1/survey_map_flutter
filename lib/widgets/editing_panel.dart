@@ -332,13 +332,19 @@ class EditingPanel extends StatelessWidget {
         Row(
           children: [
             const Text(
-              'Equipment Library',
+              'Icon Library',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.open_in_full, size: 20),
+              color: Colors.blue,
+              tooltip: 'Open Icon Browser',
+              onPressed: () => _showIconBrowserDialog(context),
+            ),
             IconButton(
               icon: const Icon(Icons.delete, size: 20),
               color: model.currentTool == ToolType.equipmentDelete
@@ -352,6 +358,46 @@ class EditingPanel extends StatelessWidget {
         const SizedBox(height: 8),
         const IconLibrary(),
       ],
+    );
+  }
+
+  void _showIconBrowserDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: SizedBox(
+          width: 900,
+          height: 700,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Text(
+                      'Icon Browser',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Expanded(
+                  child: IconLibrary(isExpanded: true),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

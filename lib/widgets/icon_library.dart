@@ -3,14 +3,85 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import '../models/survey_map_model.dart';
 import '../models/annotation_models.dart';
+import '../models/posting_model.dart';
 
-class IconLibrary extends StatelessWidget {
-  const IconLibrary({super.key});
+class IconLibrary extends StatefulWidget {
+  final bool isExpanded;
+
+  const IconLibrary({super.key, this.isExpanded = false});
+
+  @override
+  State<IconLibrary> createState() => _IconLibraryState();
+}
+
+class _IconLibraryState extends State<IconLibrary> {
+  final Set<String> _selectedTags = {};
+  Set<String> _allTags = {};
 
   @override
   Widget build(BuildContext context) {
     return Consumer<SurveyMapModel>(
       builder: (context, model, child) {
+        // Extract all unique tags from icons with counts
+        final tagCounts = <String, int>{};
+        for (final icon in model.iconLibrary) {
+          final iconTags = <String>{};
+          iconTags.addAll(icon.keywords.map((k) => k.toLowerCase()));
+          if (icon.metadata is PostingMetadata) {
+            final posting = icon.metadata as PostingMetadata;
+            iconTags.addAll(posting.tags);
+          }
+          // Count each unique tag
+          for (final tag in iconTags) {
+            tagCounts[tag] = (tagCounts[tag] ?? 0) + 1;
+          }
+        }
+        // Only include tags that have at least 1 result
+        _allTags = tagCounts.keys.toSet();
+
+        // Filter icons based on search and selected tags
+        final filteredIcons = model.iconLibrary.where((icon) {
+          // Check category filter
+          final matchesCategory = model.iconCategoryFilter == null ||
+              icon.category == model.iconCategoryFilter;
+
+          // Check search query
+          final searchQuery = model.iconSearchQuery.toLowerCase();
+          bool matchesSearch = searchQuery.isEmpty;
+
+          if (!matchesSearch) {
+            // Search in name
+            if (icon.name.toLowerCase().contains(searchQuery)) {
+              matchesSearch = true;
+            }
+            // Search in keywords
+            if (icon.keywords.any((k) => k.toLowerCase().contains(searchQuery))) {
+              matchesSearch = true;
+            }
+            // Search in posting metadata
+            if (icon.metadata is PostingMetadata) {
+              final posting = icon.metadata as PostingMetadata;
+              if (posting.fullText.toLowerCase().contains(searchQuery) ||
+                  posting.id.toLowerCase().contains(searchQuery)) {
+                matchesSearch = true;
+              }
+            }
+          }
+
+          // Check tag filter
+          bool matchesTags = _selectedTags.isEmpty;
+          if (!matchesTags) {
+            final iconTags = icon.keywords.map((k) => k.toLowerCase()).toSet();
+            if (icon.metadata is PostingMetadata) {
+              final posting = icon.metadata as PostingMetadata;
+              iconTags.addAll(posting.tags);
+            }
+            matchesTags = _selectedTags.any((tag) => iconTags.contains(tag));
+          }
+
+          return matchesCategory && matchesSearch && matchesTags;
+        }).toList();
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -25,52 +96,135 @@ class IconLibrary extends StatelessWidget {
               onChanged: (value) => model.setIconSearchQuery(value),
             ),
             const SizedBox(height: 8),
-            // Category filter
+
+            // Category dropdown
             DropdownButtonFormField<IconCategory?>(
               value: model.iconCategoryFilter,
               decoration: const InputDecoration(
-                labelText: 'Category',
+                labelText: 'Type',
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
-              items: [
-                const DropdownMenuItem(
-                  value: null,
-                  child: Text('All Categories'),
-                ),
-                ...IconCategory.values.map((category) {
-                  return DropdownMenuItem(
-                    value: category,
-                    child: Text(category.displayName),
-                  );
-                }),
+              items: const [
+                DropdownMenuItem(value: null, child: Text('All')),
+                DropdownMenuItem(value: IconCategory.posting, child: Text('Postings')),
+                DropdownMenuItem(value: IconCategory.equipment, child: Text('Material Icons')),
               ],
-              onChanged: (value) => model.setIconCategoryFilter(value),
+              onChanged: (value) {
+                model.setIconCategoryFilter(value);
+                setState(() {});
+              },
             ),
-            const SizedBox(height: 12),
-            // Icon grid
-            Container(
-              height: 400,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(4),
+            const SizedBox(height: 8),
+
+            // Tag filter chips
+            if (_allTags.isNotEmpty) ...[
+              const Text(
+                'Filter by tags:',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
               ),
-              child: model.filteredIcons.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No icons found',
-                        style: TextStyle(color: Colors.grey),
+              const SizedBox(height: 4),
+              SizedBox(
+                height: 40,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: _allTags.take(20).map((tag) {
+                    final isSelected = _selectedTags.contains(tag);
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: FilterChip(
+                        label: Text(
+                          tag,
+                          style: TextStyle(fontSize: 10),
+                        ),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() {
+                            if (selected) {
+                              _selectedTags.add(tag);
+                            } else {
+                              _selectedTags.remove(tag);
+                            }
+                          });
+                        },
+                        padding: EdgeInsets.zero,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(8),
-                      itemCount: model.filteredIcons.length,
-                      itemBuilder: (context, index) {
-                        final icon = model.filteredIcons[index];
-                        return _IconCard(icon: icon);
-                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+              if (_selectedTags.isNotEmpty) ...[
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _selectedTags.clear();
+                    });
+                  },
+                  icon: const Icon(Icons.clear, size: 16),
+                  label: const Text('Clear filters', style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 30),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+            ],
+
+            // Icon grid
+            widget.isExpanded
+                ? Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: filteredIcons.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'No postings found',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            )
+                          : GridView.builder(
+                              padding: const EdgeInsets.all(8),
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 3,
+                                childAspectRatio: 1.2,
+                                crossAxisSpacing: 8,
+                                mainAxisSpacing: 8,
+                              ),
+                              itemCount: filteredIcons.length,
+                              itemBuilder: (context, index) {
+                                final icon = filteredIcons[index];
+                                return _IconCard(icon: icon, isExpanded: true);
+                              },
+                            ),
                     ),
-            ),
+                  )
+                : Container(
+                    height: 300,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: filteredIcons.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No postings found',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(8),
+                            itemCount: filteredIcons.length,
+                            itemBuilder: (context, index) {
+                              final icon = filteredIcons[index];
+                              return _IconCard(icon: icon, isExpanded: false);
+                            },
+                          ),
+                  ),
           ],
         );
       },
@@ -80,11 +234,84 @@ class IconLibrary extends StatelessWidget {
 
 class _IconCard extends StatelessWidget {
   final IconMetadata icon;
+  final bool isExpanded;
 
-  const _IconCard({required this.icon});
+  const _IconCard({required this.icon, this.isExpanded = false});
+
+  Widget _buildIconPreview(IconMetadata icon) {
+    // Check if it's a Material Icon
+    if (icon.metadata is Map && icon.metadata['type'] == 'material') {
+      final iconData = icon.metadata['iconData'] as IconData;
+      return Icon(iconData, size: isExpanded ? 48 : 40, color: Colors.black87);
+    }
+
+    // SVG string
+    if (icon.svgText != null) {
+      return SvgPicture.string(
+        icon.svgText!,
+        width: isExpanded ? null : 50,
+        height: isExpanded ? null : 50,
+        fit: BoxFit.contain,
+      );
+    }
+
+    // SVG asset
+    if (icon.assetPath != null) {
+      return SvgPicture.asset(
+        icon.assetPath!,
+        width: isExpanded ? null : 50,
+        height: isExpanded ? null : 50,
+        fit: BoxFit.contain,
+      );
+    }
+
+    return const Icon(Icons.image_not_supported);
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (isExpanded) {
+      // Grid view card
+      return Card(
+        child: InkWell(
+          onTap: () => _onIconTap(context),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Icon preview
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Center(
+                      child: _buildIconPreview(icon),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Icon name
+                Text(
+                  icon.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // List view card
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: InkWell(
@@ -102,12 +329,7 @@ class _IconCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Center(
-                  child: SvgPicture.string(
-                    icon.svgText,
-                    width: 50,
-                    height: 50,
-                    fit: BoxFit.contain,
-                  ),
+                  child: _buildIconPreview(icon),
                 ),
               ),
               const SizedBox(width: 12),
@@ -177,11 +399,25 @@ class _IconCard extends StatelessWidget {
       model.pdfSize.height / 2,
     );
 
+    // Get icon content - handle Material Icons differently
+    String iconContent = '';
+
+    if (icon.metadata is Map && icon.metadata['type'] == 'material') {
+      // For Material Icons, store the icon data as metadata
+      iconContent = 'material:${icon.file}';
+    } else {
+      // Get SVG content - either from inline text or load from asset
+      iconContent = icon.svgText ?? '';
+      if (iconContent.isEmpty && icon.assetPath != null) {
+        iconContent = icon.assetPath!;
+      }
+    }
+
     model.addEquipment(
       EquipmentAnnotation(
         position: centerPosition,
         iconFile: icon.file,
-        iconSvg: icon.svgText,
+        iconSvg: iconContent,
         width: 80,
         height: 80,
       ),

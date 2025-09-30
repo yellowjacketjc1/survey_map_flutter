@@ -39,3 +39,5 @@ flutter:
 
   assets:
     - assets/icons/
+    - assets/Postings/
+    - assets/postings.json

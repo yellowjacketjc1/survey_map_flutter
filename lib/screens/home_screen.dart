@@ -25,10 +25,15 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadIcons();
   }
 
-  void _loadIcons() {
+  Future<void> _loadIcons() async {
     final model = context.read<SurveyMapModel>();
-    final icons = IconLoader.loadEmbeddedIcons();
-    model.setIconLibrary(icons);
+
+    // Load all icon types
+    final embeddedIcons = IconLoader.loadEmbeddedIcons();
+    final postingIcons = await IconLoader.loadPostingsFromJson();
+    final materialIcons = IconLoader.loadMaterialIcons();
+
+    model.setIconLibrary([...embeddedIcons, ...postingIcons, ...materialIcons]);
   }
 
   Future<void> _pickAndLoadPdf() async {

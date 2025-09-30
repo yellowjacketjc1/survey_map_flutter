@@ -40,20 +40,24 @@ class _MapCanvasState extends State<MapCanvas> {
   Future<void> _preloadIcons() async {
     final model = context.read<SurveyMapModel>();
     for (final icon in model.iconLibrary) {
-      await _loadSvgToImage(icon.svgText, icon.file);
+      if (icon.svgText != null) {
+        await _loadSvgToImage(icon.svgText!, icon.file, isAsset: false);
+      } else if (icon.assetPath != null) {
+        await _loadSvgToImage(icon.assetPath!, icon.file, isAsset: true);
+      }
     }
     // Also load equipment icons
     for (final equipment in model.equipment) {
-      await _loadSvgToImage(equipment.iconSvg, equipment.iconFile);
+      await _loadSvgToImage(equipment.iconSvg, equipment.iconFile, isAsset: equipment.iconSvg.startsWith('assets/'));
     }
   }
 
-  Future<void> _loadSvgToImage(String svgText, String key) async {
+  Future<void> _loadSvgToImage(String svgContent, String key, {required bool isAsset}) async {
     if (_iconCache.containsKey(key)) return;
 
     try {
       final pictureInfo = await vg.loadPicture(
-        SvgStringLoader(svgText),
+        isAsset ? SvgAssetLoader(svgContent) : SvgStringLoader(svgContent),
         null,
       );
 
