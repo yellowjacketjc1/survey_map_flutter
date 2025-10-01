@@ -19,9 +19,12 @@ class _MapCanvasState extends State<MapCanvas> {
   Offset? _gestureStartPosition;
   SmearAnnotation? _draggedSmear;
   Offset? _smearDragOffset;
+  DoseRateAnnotation? _draggedDoseRate;
+  Offset? _doseRateDragOffset;
   EquipmentAnnotation? _draggedIcon;
   Offset? _iconDragOffset;
   final Map<String, ui.Image> _iconCache = {};
+  double _lastScale = 1.0;
 
   @override
   void initState() {
@@ -170,14 +173,22 @@ class _MapCanvasState extends State<MapCanvas> {
         return DragTarget<IconMetadata>(
           onAcceptWithDetails: (details) => _handleIconDrop(details, model),
           builder: (context, candidateData, rejectedData) {
-            return GestureDetector(
-              onTapDown: (details) => _handleTapDown(details, model),
-              onScaleStart: _handleScaleStart,
-              onScaleUpdate: (details) => _handleScaleUpdate(details, model),
-              onScaleEnd: _handleScaleEnd,
-              onSecondaryTapDown: (details) => _handleRightClick(details, model),
-              onDoubleTapDown: (details) => _handleDoubleTap(details, model),
-              child: MouseRegion(
+            return Listener(
+              onPointerDown: (event) {
+                // Suppress right-click context menu
+                if (event.buttons == 2) {
+                  // This is a right-click, prevent default
+                }
+              },
+              child: GestureDetector(
+                onTapDown: (details) => _handleTapDown(details, model),
+                onTapUp: (details) => _handleTapUp(details, model),
+                onScaleStart: _handleScaleStart,
+                onScaleUpdate: (details) => _handleScaleUpdate(details, model),
+                onScaleEnd: _handleScaleEnd,
+                onSecondaryTapDown: (details) => _handleRightClick(details, model),
+                onDoubleTap: () => _handleDoubleTapForEdit(model),
+                child: MouseRegion(
                 cursor: _getCursor(model),
                 child: CustomPaint(
                   painter: MapPainter(
@@ -187,6 +198,7 @@ class _MapCanvasState extends State<MapCanvas> {
                   size: Size.infinite,
                 ),
               ),
+            ),
             );
           },
         );
@@ -195,7 +207,7 @@ class _MapCanvasState extends State<MapCanvas> {
   }
 
   MouseCursor _getCursor(SurveyMapModel model) {
-    if (_draggedSmear != null || _draggedIcon != null) {
+    if (_draggedSmear != null || _draggedDoseRate != null || _draggedIcon != null) {
       return SystemMouseCursors.grabbing;
     }
 
@@ -215,11 +227,27 @@ class _MapCanvasState extends State<MapCanvas> {
   }
 
   void _handleTapDown(TapDownDetails details, SurveyMapModel model) {
-    final pagePosition = model.canvasToPage(details.localPosition);
-
     debugPrint('TapDown: tool=${model.currentTool}');
+    _gestureStartPosition = details.localPosition;
+    _lastPanPosition = details.localPosition;
+  }
 
-    // Handle equipment delete on tap
+  void _handleTapUp(TapUpDetails details, SurveyMapModel model) {
+    debugPrint('TapUp: tool=${model.currentTool}');
+
+    if (_gestureStartPosition == null) return;
+
+    // Check if this was a simple tap (not a drag)
+    final distance = (details.localPosition - _gestureStartPosition!).distance;
+    if (distance > 10) {
+      debugPrint('TapUp: Movement detected ($distance px), ignoring as tap');
+      return;
+    }
+
+    final pagePosition = model.canvasToPage(details.localPosition);
+    debugPrint('TapUp: Handling as tap at $pagePosition');
+
+    // Handle equipment delete
     if (model.currentTool == ToolType.equipmentDelete) {
       final equipment = model.getEquipmentAtPosition(pagePosition);
       if (equipment != null) {
@@ -231,22 +259,74 @@ class _MapCanvasState extends State<MapCanvas> {
       return;
     }
 
-    // Handle other tool taps
-    _gestureStartPosition = details.localPosition;
-    _lastPanPosition = details.localPosition;
+    // Handle boundary drawing
+    if (model.currentTool == ToolType.boundary) {
+      debugPrint('Adding boundary point');
+      model.addBoundaryPoint(pagePosition);
+      return;
+    }
+
+    // Handle boundary delete
+    if (model.currentTool == ToolType.boundaryDelete) {
+      final boundary = model.getBoundaryAtPosition(pagePosition, 15);
+      if (boundary != null) {
+        model.deleteBoundary(boundary);
+      }
+      return;
+    }
+
+    // Handle annotation addition
+    if (model.currentTool == ToolType.smearAdd) {
+      debugPrint('Adding smear at $pagePosition');
+      model.addSmear(pagePosition);
+      return;
+    }
+
+    if (model.currentTool == ToolType.doseAdd) {
+      debugPrint('Adding dose rate at $pagePosition');
+      model.addDoseRate(pagePosition);
+      return;
+    }
+
+    // Handle smear removal
+    if (model.currentTool == ToolType.smearRemove) {
+      final smear = model.getSmearAtPosition(pagePosition, 20);
+      if (smear != null) {
+        model.removeSmear(smear);
+      }
+      return;
+    }
+
+    // Handle dose removal
+    if (model.currentTool == ToolType.doseRemove) {
+      final dose = model.getDoseRateAtPosition(pagePosition, 30);
+      if (dose != null) {
+        model.removeDoseRate(dose);
+      }
+      return;
+    }
+
+    // Handle icon selection when no tool active
+    if (model.currentTool == ToolType.none) {
+      final equipment = model.getEquipmentAtPosition(pagePosition);
+      if (equipment != null) {
+        model.selectIcon(equipment);
+      } else {
+        model.selectIcon(null);
+      }
+    }
   }
 
   void _handleScaleStart(ScaleStartDetails details) {
     final model = context.read<SurveyMapModel>();
     final pagePosition = model.canvasToPage(details.focalPoint);
 
-    if (model.currentTool == ToolType.equipmentDelete) {
-      debugPrint('ScaleStart detected');
-    }
+    debugPrint('ScaleStart: tool=${model.currentTool}, pos=${details.focalPoint}');
 
     // Store positions for tap/drag detection
     _gestureStartPosition = details.focalPoint;
     _lastPanPosition = details.focalPoint;
+    _lastScale = 1.0;
 
 
     // Only check for dragging when no tool is active
@@ -282,12 +362,28 @@ class _MapCanvasState extends State<MapCanvas> {
         debugPrint('Smear drag started');
         return;
       }
+
+      // Check for dose rate drag
+      final doseRate = model.getDoseRateAtPosition(pagePosition, 30);
+      if (doseRate != null) {
+        _draggedDoseRate = doseRate;
+        _doseRateDragOffset = pagePosition - doseRate.position;
+        debugPrint('Dose rate drag started');
+        return;
+      }
     }
   }
 
   void _handleScaleUpdate(ScaleUpdateDetails details, SurveyMapModel model) {
+    debugPrint('ScaleUpdate: pointers=${details.pointerCount}, scale=${details.scale}, focal=${details.focalPoint}');
+
     if (_draggedSmear != null) {
       _dragSmear(details.focalPoint, model);
+      return;
+    }
+
+    if (_draggedDoseRate != null) {
+      _dragDoseRate(details.focalPoint, model);
       return;
     }
 
@@ -301,46 +397,55 @@ class _MapCanvasState extends State<MapCanvas> {
       return;
     }
 
-    // Handle zoom
-    if (details.scale != 1.0) {
-      final delta = details.scale > 1.0 ? 1.0 : -1.0;
+    // Handle pinch-to-zoom
+    if (details.scale != 1.0 && details.pointerCount >= 2) {
+      // Calculate zoom change from last scale value
+      final scaleDelta = details.scale - _lastScale;
+
+      // Convert to zoom delta (similar to mouse wheel)
+      // Multiply by a factor to make pinch zoom more responsive
+      final zoomDelta = scaleDelta * 10.0;
+
       final size = MediaQuery.of(context).size;
-      model.zoom(delta, details.focalPoint, size);
+      model.zoom(zoomDelta, details.focalPoint, size);
+
+      _lastScale = details.scale;
       _lastPanPosition = details.focalPoint;
       return;
     }
 
     // Handle pan - only when no tool is active or when using pan-compatible tools
-    if (_lastPanPosition != null && model.currentTool == ToolType.none) {
+    if (_lastPanPosition != null && model.currentTool == ToolType.none && details.pointerCount == 1) {
       final delta = details.focalPoint - _lastPanPosition!;
       model.updateOffset(delta);
-      _lastPanPosition = details.focalPoint;
     }
+
+    // Always update last position for distance tracking (but don't use for panning unless tool is none)
+    _lastPanPosition = details.focalPoint;
   }
 
   void _handleScaleEnd(ScaleEndDetails details) {
     final model = context.read<SurveyMapModel>();
 
     // Check if this was a tap (no significant movement)
-    final wasDragging = _draggedSmear != null || _draggedIcon != null || model.isResizing;
+    final wasDragging = _draggedSmear != null || _draggedDoseRate != null || _draggedIcon != null || model.isResizing;
 
     bool isTap = false;
     double distance = 0;
     if (_gestureStartPosition != null) {
       if (_lastPanPosition != null) {
         distance = (_lastPanPosition! - _gestureStartPosition!).distance;
-        // If moved less than 20 pixels, consider it a tap (very forgiving threshold)
-        isTap = distance < 20.0;
+        // If moved less than 5 pixels, consider it a tap (more strict for better tap detection)
+        isTap = distance < 5.0;
       } else {
         // If _lastPanPosition is null, it means no pan occurred, so it's definitely a tap
         isTap = true;
       }
     }
 
-    if (model.currentTool == ToolType.equipmentDelete) {
-      debugPrint('ScaleEnd: drag=$wasDragging, dist=${distance.toStringAsFixed(1)}px, tap=$isTap');
-    }
+    debugPrint('ScaleEnd: drag=$wasDragging, dist=${distance.toStringAsFixed(1)}px, tap=$isTap, tool=${model.currentTool}');
 
+    // Always handle tap if it's a tap gesture and not dragging
     if (!wasDragging && isTap) {
       // This was a tap, not a drag - handle tool actions
       _handleTap(model);
@@ -350,18 +455,26 @@ class _MapCanvasState extends State<MapCanvas> {
     _lastPanPosition = null;
     _draggedSmear = null;
     _smearDragOffset = null;
+    _draggedDoseRate = null;
+    _doseRateDragOffset = null;
     _draggedIcon = null;
     _iconDragOffset = null;
+    _lastScale = 1.0;
     model.endResize();
   }
 
   void _handleTap(SurveyMapModel model) {
-    if (_gestureStartPosition == null) return;
+    if (_gestureStartPosition == null) {
+      debugPrint('_handleTap: gestureStartPosition is null');
+      return;
+    }
 
     final pagePosition = model.canvasToPage(_gestureStartPosition!);
+    debugPrint('_handleTap called: tool=${model.currentTool}, pagePos=$pagePosition');
 
     // Handle boundary drawing
     if (model.currentTool == ToolType.boundary) {
+      debugPrint('Adding boundary point');
       model.addBoundaryPoint(pagePosition);
       return;
     }
@@ -377,11 +490,13 @@ class _MapCanvasState extends State<MapCanvas> {
 
     // Handle annotation addition
     if (model.currentTool == ToolType.smearAdd) {
+      debugPrint('Adding smear at $pagePosition');
       model.addSmear(pagePosition);
       return;
     }
 
     if (model.currentTool == ToolType.doseAdd) {
+      debugPrint('Adding dose rate at $pagePosition');
       model.addDoseRate(pagePosition);
       return;
     }
@@ -428,15 +543,143 @@ class _MapCanvasState extends State<MapCanvas> {
   }
 
   void _handleRightClick(TapDownDetails details, SurveyMapModel model) {
+    final pagePosition = model.canvasToPage(details.localPosition);
+
+    // Check if right-clicked on a dose rate
+    final doseRate = model.getDoseRateAtPosition(pagePosition, 30);
+    if (doseRate != null) {
+      _showEditDoseRateDialog(model, doseRate);
+      return;
+    }
+
+    // Handle boundary undo point
     if (model.currentTool == ToolType.boundary) {
       model.removeLastBoundaryPoint();
     }
   }
 
-  void _handleDoubleTap(TapDownDetails details, SurveyMapModel model) {
+  void _handleDoubleTapForEdit(SurveyMapModel model) {
+    if (_gestureStartPosition == null) return;
+
+    final pagePosition = model.canvasToPage(_gestureStartPosition!);
+
+    // Check if double-clicked on a dose rate
+    final doseRate = model.getDoseRateAtPosition(pagePosition, 30);
+    if (doseRate != null) {
+      _showEditDoseRateDialog(model, doseRate);
+      return;
+    }
+
+    // Handle boundary double-click (finish drawing)
     if (model.currentTool == ToolType.boundary) {
       model.finishCurrentBoundary();
     }
+  }
+
+  void _showEditDoseRateDialog(SurveyMapModel model, DoseRateAnnotation doseRate) {
+    final valueController = TextEditingController(text: doseRate.value.toString());
+    String selectedUnit = doseRate.unit;
+    DoseType selectedType = doseRate.type;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Edit Dose Rate'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: valueController,
+                decoration: const InputDecoration(
+                  labelText: 'Value',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+                autofocus: true,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: selectedUnit,
+                decoration: const InputDecoration(
+                  labelText: 'Unit',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'μR/hr', child: Text('μR/hr')),
+                  DropdownMenuItem(value: 'mR/hr', child: Text('mR/hr')),
+                  DropdownMenuItem(value: 'R/hr', child: Text('R/hr')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      selectedUnit = value;
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: RadioListTile<DoseType>(
+                      title: const Text('Gamma'),
+                      value: DoseType.gamma,
+                      groupValue: selectedType,
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            selectedType = value;
+                          });
+                        }
+                      },
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  Expanded(
+                    child: RadioListTile<DoseType>(
+                      title: const Text('Neutron'),
+                      value: DoseType.neutron,
+                      groupValue: selectedType,
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            selectedType = value;
+                          });
+                        }
+                      },
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final newValue = double.tryParse(valueController.text);
+                if (newValue != null) {
+                  model.editDoseRate(doseRate, newValue, selectedUnit, selectedType);
+                  Navigator.pop(context);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Please enter a valid number')),
+                  );
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _handleIconDrop(DragTargetDetails<IconMetadata> details, SurveyMapModel model) {
@@ -488,6 +731,14 @@ class _MapCanvasState extends State<MapCanvas> {
     final pagePosition = model.canvasToPage(focalPoint);
     final newPosition = pagePosition - _smearDragOffset!;
     model.updateSmearPosition(_draggedSmear!, newPosition);
+  }
+
+  void _dragDoseRate(Offset focalPoint, SurveyMapModel model) {
+    if (_draggedDoseRate == null || _doseRateDragOffset == null) return;
+
+    final pagePosition = model.canvasToPage(focalPoint);
+    final newPosition = pagePosition - _doseRateDragOffset!;
+    model.updateDoseRatePosition(_draggedDoseRate!, newPosition);
   }
 
   void _dragIcon(Offset focalPoint, SurveyMapModel model) {

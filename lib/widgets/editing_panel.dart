@@ -291,36 +291,6 @@ class EditingPanel extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Draw: Left-click to add points',
-                style: TextStyle(fontSize: 12),
-              ),
-              Text(
-                'Right-click to undo',
-                style: TextStyle(fontSize: 12),
-              ),
-              Text(
-                'Double-click to finish',
-                style: TextStyle(fontSize: 12),
-              ),
-              SizedBox(height: 4),
-              Text(
-                'Delete: Click (-) then click on any boundary line',
-                style: TextStyle(fontSize: 12),
-              ),
-            ],
-          ),
-        ),
       ],
     );
   }

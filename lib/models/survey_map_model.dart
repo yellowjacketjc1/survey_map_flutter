@@ -1,8 +1,11 @@
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'annotation_models.dart';
+import 'undo_redo_manager.dart';
+import 'commands.dart';
 
 class SurveyMapModel extends ChangeNotifier {
   // PDF data
@@ -44,6 +47,9 @@ class SurveyMapModel extends ChangeNotifier {
   final List<IconMetadata> _iconLibrary = [];
   String _iconSearchQuery = '';
   IconCategory? _iconCategoryFilter;
+
+  // Undo/Redo manager
+  final UndoRedoManager undoRedoManager = UndoRedoManager();
 
   // Getters
   Uint8List? get pdfBytes => _pdfBytes;
@@ -180,22 +186,47 @@ class SurveyMapModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Smear methods
+  // Smear methods (with undo/redo)
   void addSmear(Offset position) {
-    _smears.add(SmearAnnotation(
+    final smear = SmearAnnotation(
       id: _nextSmearId++,
       position: position,
-    ));
-    notifyListeners();
+    );
+    undoRedoManager.executeCommand(AddSmearCommand(this, smear));
+    debugPrint('✓ Smear added at $position, total: ${_smears.length}');
   }
 
   void removeSmear(SmearAnnotation smear) {
-    _smears.remove(smear);
-    renumberSmears();
-    notifyListeners();
+    final index = _smears.indexOf(smear);
+    if (index != -1) {
+      undoRedoManager.executeCommand(RemoveSmearCommand(this, smear, index));
+    }
   }
 
   void updateSmearPosition(SmearAnnotation smear, Offset newPosition) {
+    final oldPosition = smear.position;
+    if (oldPosition != newPosition) {
+      undoRedoManager.executeCommand(MoveSmearCommand(this, smear, oldPosition, newPosition));
+    }
+  }
+
+  // Direct methods (used by commands, no undo/redo)
+  void addSmearDirect(SmearAnnotation smear) {
+    _smears.add(smear);
+    notifyListeners();
+  }
+
+  void addSmearDirectAt(SmearAnnotation smear, int index) {
+    _smears.insert(index, smear);
+    notifyListeners();
+  }
+
+  void removeSmearDirect(SmearAnnotation smear) {
+    _smears.remove(smear);
+    notifyListeners();
+  }
+
+  void updateSmearPositionDirect(SmearAnnotation smear, Offset newPosition) {
     final index = _smears.indexOf(smear);
     if (index != -1) {
       _smears[index] = smear.copyWith(position: newPosition);
@@ -238,18 +269,71 @@ class SurveyMapModel extends ChangeNotifier {
   }
 
   void addDoseRate(Offset position) {
-    _doseRates.add(DoseRateAnnotation(
+    final doseRate = DoseRateAnnotation(
       position: position,
       value: _doseValue,
       unit: _doseUnit,
       type: _doseType,
-    ));
-    notifyListeners();
+    );
+    undoRedoManager.executeCommand(AddDoseRateCommand(this, doseRate));
+    debugPrint('✓ Dose rate added at $position: $_doseValue $_doseUnit, total: ${_doseRates.length}');
   }
 
   void removeDoseRate(DoseRateAnnotation doseRate) {
+    final index = _doseRates.indexOf(doseRate);
+    if (index != -1) {
+      undoRedoManager.executeCommand(RemoveDoseRateCommand(this, doseRate, index));
+    }
+  }
+
+  void updateDoseRatePosition(DoseRateAnnotation doseRate, Offset newPosition) {
+    final oldPosition = doseRate.position;
+    if (oldPosition != newPosition) {
+      undoRedoManager.executeCommand(MoveDoseRateCommand(this, doseRate, oldPosition, newPosition));
+    }
+  }
+
+  void editDoseRate(DoseRateAnnotation oldDoseRate, double newValue, String newUnit, DoseType newType) {
+    final index = _doseRates.indexOf(oldDoseRate);
+    if (index != -1) {
+      final newDoseRate = oldDoseRate.copyWith(
+        value: newValue,
+        unit: newUnit,
+        type: newType,
+      );
+      undoRedoManager.executeCommand(EditDoseRateCommand(this, oldDoseRate, newDoseRate, index));
+    }
+  }
+
+  // Direct methods (used by commands, no undo/redo)
+  void addDoseRateDirect(DoseRateAnnotation doseRate) {
+    _doseRates.add(doseRate);
+    notifyListeners();
+  }
+
+  void addDoseRateDirectAt(DoseRateAnnotation doseRate, int index) {
+    _doseRates.insert(index, doseRate);
+    notifyListeners();
+  }
+
+  void removeDoseRateDirect(DoseRateAnnotation doseRate) {
     _doseRates.remove(doseRate);
     notifyListeners();
+  }
+
+  void updateDoseRatePositionDirect(DoseRateAnnotation doseRate, Offset newPosition) {
+    final index = _doseRates.indexOf(doseRate);
+    if (index != -1) {
+      _doseRates[index] = doseRate.copyWith(position: newPosition);
+      notifyListeners();
+    }
+  }
+
+  void updateDoseRateAt(int index, DoseRateAnnotation doseRate) {
+    if (index >= 0 && index < _doseRates.length) {
+      _doseRates[index] = doseRate;
+      notifyListeners();
+    }
   }
 
   DoseRateAnnotation? getDoseRateAtPosition(Offset position, double threshold) {
@@ -287,13 +371,34 @@ class SurveyMapModel extends ChangeNotifier {
 
   void finishCurrentBoundary() {
     if (_currentBoundary != null && _currentBoundary!.points.length > 1) {
-      _boundaries.add(_currentBoundary!);
+      final boundary = _currentBoundary!;
+      _currentBoundary = null;
+      undoRedoManager.executeCommand(AddBoundaryCommand(this, boundary));
+    } else {
+      _currentBoundary = null;
+      notifyListeners();
     }
-    _currentBoundary = null;
-    notifyListeners();
   }
 
   void deleteBoundary(BoundaryAnnotation boundary) {
+    final index = _boundaries.indexOf(boundary);
+    if (index != -1) {
+      undoRedoManager.executeCommand(DeleteBoundaryCommand(this, boundary, index));
+    }
+  }
+
+  // Direct methods (used by commands)
+  void addBoundaryDirect(BoundaryAnnotation boundary) {
+    _boundaries.add(boundary);
+    notifyListeners();
+  }
+
+  void addBoundaryDirectAt(BoundaryAnnotation boundary, int index) {
+    _boundaries.insert(index, boundary);
+    notifyListeners();
+  }
+
+  void deleteBoundaryDirect(BoundaryAnnotation boundary) {
     _boundaries.remove(boundary);
     notifyListeners();
   }
@@ -339,13 +444,47 @@ class SurveyMapModel extends ChangeNotifier {
     return sqrt(dx * dx + dy * dy);
   }
 
-  // Equipment methods
+  // Equipment methods (with undo/redo)
   void addEquipment(EquipmentAnnotation equipment) {
+    undoRedoManager.executeCommand(AddEquipmentCommand(this, equipment));
+  }
+
+  void removeEquipment(EquipmentAnnotation equipment) {
+    final index = _equipment.indexWhere((e) => e.id == equipment.id);
+    if (index != -1) {
+      undoRedoManager.executeCommand(RemoveEquipmentCommand(this, equipment, index));
+    }
+  }
+
+  void updateEquipmentPosition(EquipmentAnnotation equipment, Offset newPosition) {
+    final oldPosition = equipment.position;
+    if (oldPosition != newPosition) {
+      undoRedoManager.executeCommand(MoveEquipmentCommand(this, equipment, oldPosition, newPosition));
+    }
+  }
+
+  void updateEquipmentSize(EquipmentAnnotation equipment, double width, double height) {
+    final oldWidth = equipment.width;
+    final oldHeight = equipment.height;
+    if (oldWidth != width || oldHeight != height) {
+      undoRedoManager.executeCommand(
+        ResizeEquipmentCommand(this, equipment, oldWidth, oldHeight, width, height),
+      );
+    }
+  }
+
+  // Direct methods (used by commands, no undo/redo)
+  void addEquipmentDirect(EquipmentAnnotation equipment) {
     _equipment.add(equipment);
     notifyListeners();
   }
 
-  void removeEquipment(EquipmentAnnotation equipment) {
+  void addEquipmentDirectAt(EquipmentAnnotation equipment, int index) {
+    _equipment.insert(index, equipment);
+    notifyListeners();
+  }
+
+  void removeEquipmentDirect(EquipmentAnnotation equipment) {
     final index = _equipment.indexWhere((e) => e.id == equipment.id);
     if (index != -1) {
       _equipment.removeAt(index);
@@ -356,12 +495,10 @@ class SurveyMapModel extends ChangeNotifier {
     }
   }
 
-  void updateEquipmentPosition(
-      EquipmentAnnotation equipment, Offset newPosition) {
+  void updateEquipmentPositionDirect(EquipmentAnnotation equipment, Offset newPosition) {
     final index = _equipment.indexWhere((e) => e.id == equipment.id);
     if (index != -1) {
       _equipment[index] = equipment.copyWith(position: newPosition);
-      // Update selectedIcon reference if it's the same equipment
       if (_selectedIcon?.id == equipment.id) {
         _selectedIcon = _equipment[index];
       }
@@ -369,13 +506,10 @@ class SurveyMapModel extends ChangeNotifier {
     }
   }
 
-  void updateEquipmentSize(
-      EquipmentAnnotation equipment, double width, double height) {
+  void updateEquipmentSizeDirect(EquipmentAnnotation equipment, double width, double height) {
     final index = _equipment.indexWhere((e) => e.id == equipment.id);
     if (index != -1) {
-      _equipment[index] =
-          equipment.copyWith(width: width, height: height);
-      // Update selectedIcon reference if it's the same equipment
+      _equipment[index] = equipment.copyWith(width: width, height: height);
       if (_selectedIcon?.id == equipment.id) {
         _selectedIcon = _equipment[index];
       }
@@ -474,6 +608,77 @@ class SurveyMapModel extends ChangeNotifier {
     _currentBoundary = null;
     _nextSmearId = 1;
     _selectedIcon = null;
+    notifyListeners();
+  }
+
+  // Save/Load functionality
+  Map<String, dynamic> toJson() {
+    return {
+      'version': '1.0',
+      'rotation': _rotation,
+      'scale': _scale,
+      'offset': {'dx': _offset.dx, 'dy': _offset.dy},
+      'smears': _smears.map((s) => s.toJson()).toList(),
+      'doseRates': _doseRates.map((d) => d.toJson()).toList(),
+      'boundaries': _boundaries.map((b) => b.toJson()).toList(),
+      'equipment': _equipment.map((e) => e.toJson()).toList(),
+      'nextSmearId': _nextSmearId,
+      'pdfBytes': _pdfBytes != null ? base64Encode(_pdfBytes!) : null,
+    };
+  }
+
+  Future<void> fromJson(Map<String, dynamic> json) async {
+    // Clear existing data
+    _smears.clear();
+    _doseRates.clear();
+    _boundaries.clear();
+    _equipment.clear();
+    undoRedoManager.clear();
+
+    // Load data
+    _rotation = (json['rotation'] as num?)?.toDouble() ?? 0;
+    _scale = (json['scale'] as num?)?.toDouble() ?? 1.0;
+    if (json['offset'] != null) {
+      final offset = json['offset'] as Map<String, dynamic>;
+      _offset = Offset(
+        (offset['dx'] as num).toDouble(),
+        (offset['dy'] as num).toDouble(),
+      );
+    }
+
+    // Load annotations
+    if (json['smears'] != null) {
+      for (final smearJson in json['smears'] as List) {
+        _smears.add(SmearAnnotation.fromJson(smearJson as Map<String, dynamic>));
+      }
+    }
+
+    if (json['doseRates'] != null) {
+      for (final doseJson in json['doseRates'] as List) {
+        _doseRates.add(DoseRateAnnotation.fromJson(doseJson as Map<String, dynamic>));
+      }
+    }
+
+    if (json['boundaries'] != null) {
+      for (final boundaryJson in json['boundaries'] as List) {
+        _boundaries.add(BoundaryAnnotation.fromJson(boundaryJson as Map<String, dynamic>));
+      }
+    }
+
+    if (json['equipment'] != null) {
+      for (final equipmentJson in json['equipment'] as List) {
+        _equipment.add(EquipmentAnnotation.fromJson(equipmentJson as Map<String, dynamic>));
+      }
+    }
+
+    _nextSmearId = (json['nextSmearId'] as int?) ?? 1;
+
+    // Load PDF if available
+    if (json['pdfBytes'] != null) {
+      _pdfBytes = base64Decode(json['pdfBytes'] as String);
+      // Note: PDF image will need to be reloaded separately
+    }
+
     notifyListeners();
   }
 

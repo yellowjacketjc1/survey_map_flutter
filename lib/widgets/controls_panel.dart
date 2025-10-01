@@ -5,11 +5,15 @@ import '../models/survey_map_model.dart';
 class ControlsPanel extends StatefulWidget {
   final VoidCallback onExport;
   final VoidCallback onReset;
+  final VoidCallback onSave;
+  final VoidCallback onLoad;
 
   const ControlsPanel({
     super.key,
     required this.onExport,
     required this.onReset,
+    required this.onSave,
+    required this.onLoad,
   });
 
   @override
@@ -65,7 +69,7 @@ class _ControlsPanelState extends State<ControlsPanel> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Text(
-                        'Use mouse wheel to zoom and click-drag to pan.',
+                        'Use mouse wheel or pinch to zoom, click-drag to pan.',
                         style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                       const SizedBox(height: 16),
@@ -133,6 +137,52 @@ class _ControlsPanelState extends State<ControlsPanel> {
                         ],
                       ),
                       const SizedBox(height: 16),
+                      // Undo/Redo buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: model.undoRedoManager.canUndo
+                                  ? () => model.undoRedoManager.undo()
+                                  : null,
+                              icon: const Icon(Icons.undo, size: 18),
+                              label: const Text('Undo'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: model.undoRedoManager.canRedo
+                                  ? () => model.undoRedoManager.redo()
+                                  : null,
+                              icon: const Icon(Icons.redo, size: 18),
+                              label: const Text('Redo'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // Save/Load buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: widget.onSave,
+                              icon: const Icon(Icons.save, size: 18),
+                              label: const Text('Save'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: widget.onLoad,
+                              icon: const Icon(Icons.folder_open, size: 18),
+                              label: const Text('Load'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                       // Control buttons
                       Row(
                         children: [

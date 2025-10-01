@@ -1,5 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 import '../models/survey_map_model.dart';
 import '../services/pdf_service.dart';
 import '../services/icon_loader.dart';
@@ -111,6 +114,80 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.green,
       ),
     );
+  }
+
+  Future<void> _saveProject() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final model = context.read<SurveyMapModel>();
+      final jsonData = model.toJson();
+      final jsonString = const JsonEncoder.withIndent('  ').convert(jsonData);
+
+      // Ask user where to save
+      final String? outputPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Survey Map Project',
+        fileName: 'survey_map_${DateTime.now().millisecondsSinceEpoch}.json',
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+
+      if (outputPath != null) {
+        final file = File(outputPath);
+        await file.writeAsString(jsonString);
+        _showSuccess('Project saved to: $outputPath');
+      }
+    } catch (e) {
+      _showError('Error saving project: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadProject() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        dialogTitle: 'Load Survey Map Project',
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+        final jsonString = await file.readAsString();
+        final jsonData = json.decode(jsonString) as Map<String, dynamic>;
+
+        final model = context.read<SurveyMapModel>();
+        await model.fromJson(jsonData);
+
+        // Reload PDF image if PDF bytes are present
+        if (model.pdfBytes != null) {
+          final image = await PdfService.loadPdfPage(model.pdfBytes!);
+          if (image != null) {
+            model.setPdfImage(image);
+            _showSuccess('Project loaded successfully');
+          } else {
+            _showError('Project loaded but failed to render PDF');
+          }
+        } else {
+          _showSuccess('Project loaded successfully (no PDF)');
+        }
+      }
+    } catch (e) {
+      _showError('Error loading project: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -250,6 +327,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ControlsPanel(
                 onExport: _exportMap,
                 onReset: _resetView,
+                onSave: _saveProject,
+                onLoad: _loadProject,
               ),
             ],
           ),
