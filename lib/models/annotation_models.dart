@@ -134,6 +134,7 @@ class BoundaryAnnotation {
 
 /// Represents an equipment/icon annotation
 class EquipmentAnnotation {
+  final String id;
   Offset position;
   String iconFile;
   String iconSvg;
@@ -143,6 +144,7 @@ class EquipmentAnnotation {
   EquipmentType type;
 
   EquipmentAnnotation({
+    String? id,
     required this.position,
     required this.iconFile,
     required this.iconSvg,
@@ -150,7 +152,7 @@ class EquipmentAnnotation {
     this.height = 80,
     this.rotation = 0,
     this.type = EquipmentType.icon,
-  });
+  }) : id = id ?? '${DateTime.now().microsecondsSinceEpoch}_${iconFile}';
 
   EquipmentAnnotation copyWith({
     Offset? position,
@@ -162,6 +164,7 @@ class EquipmentAnnotation {
     EquipmentType? type,
   }) {
     return EquipmentAnnotation(
+      id: id, // Preserve the same ID
       position: position ?? this.position,
       iconFile: iconFile ?? this.iconFile,
       iconSvg: iconSvg ?? this.iconSvg,
@@ -174,6 +177,7 @@ class EquipmentAnnotation {
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'x': position.dx,
       'y': position.dy,
       'iconFile': iconFile,
@@ -186,7 +190,12 @@ class EquipmentAnnotation {
   }
 
   factory EquipmentAnnotation.fromJson(Map<String, dynamic> json) {
+    // Generate a unique ID for legacy data that doesn't have one
+    final id = json['id'] as String? ??
+               '${DateTime.now().microsecondsSinceEpoch}_${json['iconFile']}_${json['x']}_${json['y']}';
+
     return EquipmentAnnotation(
+      id: id,
       position: Offset(
         (json['x'] as num).toDouble(),
         (json['y'] as num).toDouble(),

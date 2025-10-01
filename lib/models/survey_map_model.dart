@@ -156,13 +156,18 @@ class SurveyMapModel extends ChangeNotifier {
 
   // Tool management
   void setTool(ToolType tool) {
+    debugPrint('setTool called: $tool, current: $_currentTool');
+
+    // Allow all tools to toggle on/off
     if (_currentTool == tool) {
       _currentTool = ToolType.none;
+      debugPrint('Tool toggled off, now: $_currentTool');
       if (tool == ToolType.boundary) {
         finishCurrentBoundary();
       }
     } else {
       _currentTool = tool;
+      debugPrint('Tool set to: $_currentTool');
       if (_currentTool != ToolType.boundary) {
         finishCurrentBoundary();
       }
@@ -341,36 +346,50 @@ class SurveyMapModel extends ChangeNotifier {
   }
 
   void removeEquipment(EquipmentAnnotation equipment) {
-    _equipment.remove(equipment);
-    if (_selectedIcon == equipment) {
-      _selectedIcon = null;
+    final index = _equipment.indexWhere((e) => e.id == equipment.id);
+    if (index != -1) {
+      _equipment.removeAt(index);
+      if (_selectedIcon?.id == equipment.id) {
+        _selectedIcon = null;
+      }
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   void updateEquipmentPosition(
       EquipmentAnnotation equipment, Offset newPosition) {
-    final index = _equipment.indexOf(equipment);
+    final index = _equipment.indexWhere((e) => e.id == equipment.id);
     if (index != -1) {
       _equipment[index] = equipment.copyWith(position: newPosition);
+      // Update selectedIcon reference if it's the same equipment
+      if (_selectedIcon?.id == equipment.id) {
+        _selectedIcon = _equipment[index];
+      }
       notifyListeners();
     }
   }
 
   void updateEquipmentSize(
       EquipmentAnnotation equipment, double width, double height) {
-    final index = _equipment.indexOf(equipment);
+    final index = _equipment.indexWhere((e) => e.id == equipment.id);
     if (index != -1) {
       _equipment[index] =
           equipment.copyWith(width: width, height: height);
+      // Update selectedIcon reference if it's the same equipment
+      if (_selectedIcon?.id == equipment.id) {
+        _selectedIcon = _equipment[index];
+      }
       notifyListeners();
     }
   }
 
   EquipmentAnnotation? getEquipmentAtPosition(Offset position) {
     for (final equipment in _equipment.reversed) {
-      final halfWidth = equipment.width / 2;
-      final halfHeight = equipment.height / 2;
+      // Use minimal 3px padding for very precise click detection
+      final padding = 3.0;
+      final halfWidth = (equipment.width / 2) + padding;
+      final halfHeight = (equipment.height / 2) + padding;
+
       if (position.dx >= equipment.position.dx - halfWidth &&
           position.dx <= equipment.position.dx + halfWidth &&
           position.dy >= equipment.position.dy - halfHeight &&

@@ -1,6 +1,5 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import '../models/annotation_models.dart';
 import '../models/survey_map_model.dart';
 
@@ -194,7 +193,7 @@ class MapPainter extends CustomPainter {
       canvas.drawRect(
         rect,
         Paint()
-          ..color = Colors.grey.withOpacity(0.5)
+          ..color = Colors.grey.withValues(alpha: 0.5)
           ..style = PaintingStyle.fill,
       );
       canvas.drawRect(

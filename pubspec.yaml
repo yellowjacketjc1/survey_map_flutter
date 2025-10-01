@@ -27,6 +27,7 @@ dependencies:
 
   # Path operations
   path_provider: ^2.1.1
+  vector_graphics: ^1.1.19
 
 dev_dependencies:
   flutter_test:
