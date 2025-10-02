@@ -3,17 +3,19 @@ import 'package:provider/provider.dart';
 import '../models/survey_map_model.dart';
 
 class ControlsPanel extends StatefulWidget {
-  final VoidCallback onExport;
   final VoidCallback onReset;
   final VoidCallback onSave;
   final VoidCallback onLoad;
+  final VoidCallback onExportPdf;
+  final VoidCallback onPrint;
 
   const ControlsPanel({
     super.key,
-    required this.onExport,
     required this.onReset,
     required this.onSave,
     required this.onLoad,
+    required this.onExportPdf,
+    required this.onPrint,
   });
 
   @override
@@ -183,23 +185,25 @@ class _ControlsPanelState extends State<ControlsPanel> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      // Control buttons
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: widget.onReset,
-                              child: const Text('Reset View'),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: widget.onExport,
-                              child: const Text('Export PNG'),
-                            ),
-                          ),
-                        ],
+                      // PDF Export button
+                      ElevatedButton.icon(
+                        onPressed: widget.onExportPdf,
+                        icon: const Icon(Icons.picture_as_pdf, size: 18),
+                        label: const Text('Export PDF'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          minimumSize: const Size(double.infinity, 40),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Reset button
+                      ElevatedButton(
+                        onPressed: widget.onReset,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          minimumSize: const Size(double.infinity, 40),
+                        ),
+                        child: const Text('Reset View'),
                       ),
                     ],
                   );

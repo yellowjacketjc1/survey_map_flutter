@@ -7,6 +7,7 @@ import '../models/survey_map_model.dart';
 import '../services/pdf_service.dart';
 import '../services/icon_loader.dart';
 import '../services/export_service.dart';
+import '../services/pdf_export_service.dart';
 import '../widgets/map_canvas.dart';
 import '../widgets/controls_panel.dart';
 import '../widgets/editing_panel.dart';
@@ -89,6 +90,57 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    // Give UI time to update
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    try {
+      final model = context.read<SurveyMapModel>();
+      await PdfExportService.exportToPdf(model, _canvasKey);
+      if (mounted) {
+        _showSuccess('PDF exported successfully');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('Error exporting PDF: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _printMap() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    // Give UI time to update
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    try {
+      final model = context.read<SurveyMapModel>();
+      await PdfExportService.printMap(model, _canvasKey);
+    } catch (e) {
+      if (mounted) {
+        _showError('Error printing map: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -325,10 +377,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: const MapCanvas(),
               ),
               ControlsPanel(
-                onExport: _exportMap,
                 onReset: _resetView,
                 onSave: _saveProject,
                 onLoad: _loadProject,
+                onExportPdf: _exportPdf,
+                onPrint: _printMap,
               ),
             ],
           ),
