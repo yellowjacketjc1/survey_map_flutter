@@ -90,6 +90,22 @@ class EditingPanel extends StatelessWidget {
                 fontWeight: FontWeight.bold,
               ),
             ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${model.nextSmearId}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black54,
+                ),
+              ),
+            ),
             const Spacer(),
             IconButton(
               icon: const Icon(Icons.add_circle, size: 20),
@@ -108,24 +124,6 @@ class EditingPanel extends StatelessWidget {
               onPressed: () => model.setTool(ToolType.smearRemove),
             ),
           ],
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Row(
-            children: [
-              const Text('Next ID:'),
-              const SizedBox(width: 8),
-              Text(
-                '${model.nextSmearId}',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
         ),
       ],
     );
@@ -274,7 +272,7 @@ class EditingPanel extends StatelessWidget {
             ),
             const Spacer(),
             IconButton(
-              icon: const Icon(Icons.crop_square, size: 20),
+              icon: const Icon(Icons.add_circle, size: 20),
               color: model.currentTool == ToolType.boundary
                   ? Colors.blue
                   : Colors.grey,

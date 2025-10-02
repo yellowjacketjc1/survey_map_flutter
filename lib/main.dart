@@ -22,6 +22,12 @@ class SurveyMapApp extends StatelessWidget {
         ),
         home: const HomeScreen(),
         debugShowCheckedModeBanner: false,
+        builder: (context, child) {
+          return MediaQuery(
+            data: MediaQuery.of(context),
+            child: child!,
+          );
+        },
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:vector_graphics/vector_graphics.dart' as vg_lib;
@@ -174,31 +175,34 @@ class _MapCanvasState extends State<MapCanvas> {
           onAcceptWithDetails: (details) => _handleIconDrop(details, model),
           builder: (context, candidateData, rejectedData) {
             return Listener(
-              onPointerDown: (event) {
-                // Suppress right-click context menu
-                if (event.buttons == 2) {
-                  // This is a right-click, prevent default
+              onPointerSignal: (event) {
+                if (event is PointerScrollEvent) {
+                  _handleScrollZoom(event, model);
                 }
               },
               child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
                 onTapDown: (details) => _handleTapDown(details, model),
                 onTapUp: (details) => _handleTapUp(details, model),
                 onScaleStart: _handleScaleStart,
                 onScaleUpdate: (details) => _handleScaleUpdate(details, model),
                 onScaleEnd: _handleScaleEnd,
-                onSecondaryTapDown: (details) => _handleRightClick(details, model),
+                onSecondaryTapDown: (details) {
+                  // Prevent default context menu and handle right-click
+                  _handleRightClick(details, model);
+                },
                 onDoubleTap: () => _handleDoubleTapForEdit(model),
                 child: MouseRegion(
-                cursor: _getCursor(model),
-                child: CustomPaint(
-                  painter: MapPainter(
-                    model: model,
-                    iconCache: _iconCache,
+                  cursor: _getCursor(model),
+                  child: CustomPaint(
+                    painter: MapPainter(
+                      model: model,
+                      iconCache: _iconCache,
+                    ),
+                    size: Size.infinite,
                   ),
-                  size: Size.infinite,
                 ),
               ),
-            ),
             );
           },
         );
@@ -224,6 +228,23 @@ class _MapCanvasState extends State<MapCanvas> {
       default:
         return SystemMouseCursors.grab;
     }
+  }
+
+  void _handleScrollZoom(PointerScrollEvent event, SurveyMapModel model) {
+    // Skip trackpad events due to Flutter framework assertion bug
+    // This is a known issue in Flutter web with trackpad scrolling
+    if (event.kind == PointerDeviceKind.trackpad) {
+      return;
+    }
+
+    // Calculate zoom delta from scroll
+    final scrollDelta = event.scrollDelta.dy;
+
+    // Invert scroll direction for natural zoom (scroll up = zoom in)
+    final zoomDelta = -scrollDelta / 100.0;
+
+    final size = MediaQuery.of(context).size;
+    model.zoom(zoomDelta, event.localPosition, size);
   }
 
   void _handleTapDown(TapDownDetails details, SurveyMapModel model) {

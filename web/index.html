@@ -44,5 +44,12 @@
   }
   </script>
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // Prevent default context menu on right-click
+    document.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      return false;
+    });
+  </script>
 </body>
 </html>
