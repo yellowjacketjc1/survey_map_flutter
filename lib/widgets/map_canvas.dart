@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:vector_graphics/vector_graphics.dart' as vg_lib;
 import '../models/survey_map_model.dart';
 import '../models/annotation_models.dart';
+import '../models/commands.dart';
 import 'map_painter.dart';
 
 class MapCanvas extends StatefulWidget {
@@ -20,10 +21,13 @@ class _MapCanvasState extends State<MapCanvas> {
   Offset? _gestureStartPosition;
   SmearAnnotation? _draggedSmear;
   Offset? _smearDragOffset;
+  Offset? _smearDragStartPosition;
   DoseRateAnnotation? _draggedDoseRate;
   Offset? _doseRateDragOffset;
+  Offset? _doseRateDragStartPosition;
   EquipmentAnnotation? _draggedIcon;
   Offset? _iconDragOffset;
+  Offset? _iconDragStartPosition;
   final Map<String, ui.Image> _iconCache = {};
   double _lastScale = 1.0;
 
@@ -311,7 +315,7 @@ class _MapCanvasState extends State<MapCanvas> {
 
     // Handle smear removal
     if (model.currentTool == ToolType.smearRemove) {
-      final smear = model.getSmearAtPosition(pagePosition, 20);
+      final smear = model.getSmearAtPosition(pagePosition, 40 / model.scale);
       if (smear != null) {
         model.removeSmear(smear);
       }
@@ -320,7 +324,7 @@ class _MapCanvasState extends State<MapCanvas> {
 
     // Handle dose removal
     if (model.currentTool == ToolType.doseRemove) {
-      final dose = model.getDoseRateAtPosition(pagePosition, 30);
+      final dose = model.getDoseRateAtPosition(pagePosition, 50 / model.scale);
       if (dose != null) {
         model.removeDoseRate(dose);
       }
@@ -372,24 +376,27 @@ class _MapCanvasState extends State<MapCanvas> {
         model.selectIcon(equipment);
         _draggedIcon = equipment;
         _iconDragOffset = pagePosition - equipment.position;
+        _iconDragStartPosition = equipment.position;
         return;
       }
 
-      // Check for smear drag
-      final smear = model.getSmearAtPosition(pagePosition, 20);
+      // Check for smear drag (increased threshold for easier grabbing)
+      final smear = model.getSmearAtPosition(pagePosition, 40 / model.scale);
       if (smear != null) {
         _draggedSmear = smear;
         _smearDragOffset = pagePosition - smear.position;
-        debugPrint('Smear drag started');
+        _smearDragStartPosition = smear.position;
+        debugPrint('Smear drag started: ${smear.position}');
         return;
       }
 
-      // Check for dose rate drag
-      final doseRate = model.getDoseRateAtPosition(pagePosition, 30);
+      // Check for dose rate drag (increased threshold for easier grabbing)
+      final doseRate = model.getDoseRateAtPosition(pagePosition, 50 / model.scale);
       if (doseRate != null) {
         _draggedDoseRate = doseRate;
         _doseRateDragOffset = pagePosition - doseRate.position;
-        debugPrint('Dose rate drag started');
+        _doseRateDragStartPosition = doseRate.position;
+        debugPrint('Dose rate drag started: ${doseRate.position}');
         return;
       }
     }
@@ -466,6 +473,31 @@ class _MapCanvasState extends State<MapCanvas> {
 
     debugPrint('ScaleEnd: drag=$wasDragging, dist=${distance.toStringAsFixed(1)}px, tap=$isTap, tool=${model.currentTool}');
 
+    // Create undo/redo commands for completed drags
+    if (_draggedSmear != null && _smearDragStartPosition != null && _draggedSmear!.position != _smearDragStartPosition) {
+      debugPrint('Smear dragged from $_smearDragStartPosition to ${_draggedSmear!.position}');
+      // Add command to undo stack without executing (position already updated via Direct methods)
+      model.undoRedoManager.addCommandWithoutExecuting(
+        MoveSmearCommand(model, _draggedSmear!, _smearDragStartPosition!, _draggedSmear!.position)
+      );
+    }
+
+    if (_draggedDoseRate != null && _doseRateDragStartPosition != null && _draggedDoseRate!.position != _doseRateDragStartPosition) {
+      debugPrint('Dose rate dragged from $_doseRateDragStartPosition to ${_draggedDoseRate!.position}');
+      // Add command to undo stack without executing (position already updated via Direct methods)
+      model.undoRedoManager.addCommandWithoutExecuting(
+        MoveDoseRateCommand(model, _draggedDoseRate!, _doseRateDragStartPosition!, _draggedDoseRate!.position)
+      );
+    }
+
+    if (_draggedIcon != null && _iconDragStartPosition != null && _draggedIcon!.position != _iconDragStartPosition) {
+      debugPrint('Icon dragged from $_iconDragStartPosition to ${_draggedIcon!.position}');
+      // Add command to undo stack without executing (position already updated via Direct methods)
+      model.undoRedoManager.addCommandWithoutExecuting(
+        MoveEquipmentCommand(model, _draggedIcon!, _iconDragStartPosition!, _draggedIcon!.position)
+      );
+    }
+
     // Always handle tap if it's a tap gesture and not dragging
     if (!wasDragging && isTap) {
       // This was a tap, not a drag - handle tool actions
@@ -476,10 +508,13 @@ class _MapCanvasState extends State<MapCanvas> {
     _lastPanPosition = null;
     _draggedSmear = null;
     _smearDragOffset = null;
+    _smearDragStartPosition = null;
     _draggedDoseRate = null;
     _doseRateDragOffset = null;
+    _doseRateDragStartPosition = null;
     _draggedIcon = null;
     _iconDragOffset = null;
+    _iconDragStartPosition = null;
     _lastScale = 1.0;
     model.endResize();
   }
@@ -524,7 +559,7 @@ class _MapCanvasState extends State<MapCanvas> {
 
     // Handle smear removal
     if (model.currentTool == ToolType.smearRemove) {
-      final smear = model.getSmearAtPosition(pagePosition, 20);
+      final smear = model.getSmearAtPosition(pagePosition, 40 / model.scale);
       if (smear != null) {
         model.removeSmear(smear);
       }
@@ -533,7 +568,7 @@ class _MapCanvasState extends State<MapCanvas> {
 
     // Handle dose removal
     if (model.currentTool == ToolType.doseRemove) {
-      final dose = model.getDoseRateAtPosition(pagePosition, 30);
+      final dose = model.getDoseRateAtPosition(pagePosition, 50 / model.scale);
       if (dose != null) {
         model.removeDoseRate(dose);
       }
@@ -566,8 +601,8 @@ class _MapCanvasState extends State<MapCanvas> {
   void _handleRightClick(TapDownDetails details, SurveyMapModel model) {
     final pagePosition = model.canvasToPage(details.localPosition);
 
-    // Check if right-clicked on a dose rate
-    final doseRate = model.getDoseRateAtPosition(pagePosition, 30);
+    // Check if right-clicked on a dose rate (scale-aware threshold)
+    final doseRate = model.getDoseRateAtPosition(pagePosition, 50 / model.scale);
     if (doseRate != null) {
       _showEditDoseRateDialog(model, doseRate);
       return;
@@ -584,8 +619,8 @@ class _MapCanvasState extends State<MapCanvas> {
 
     final pagePosition = model.canvasToPage(_gestureStartPosition!);
 
-    // Check if double-clicked on a dose rate
-    final doseRate = model.getDoseRateAtPosition(pagePosition, 30);
+    // Check if double-clicked on a dose rate (scale-aware threshold)
+    final doseRate = model.getDoseRateAtPosition(pagePosition, 50 / model.scale);
     if (doseRate != null) {
       _showEditDoseRateDialog(model, doseRate);
       return;
@@ -751,7 +786,15 @@ class _MapCanvasState extends State<MapCanvas> {
 
     final pagePosition = model.canvasToPage(focalPoint);
     final newPosition = pagePosition - _smearDragOffset!;
-    model.updateSmearPosition(_draggedSmear!, newPosition);
+
+    // Use Direct method to avoid creating undo/redo commands on every frame
+    model.updateSmearPositionDirect(_draggedSmear!, newPosition);
+
+    // Update reference to the modified smear
+    final index = model.smears.indexWhere((s) => s.id == _draggedSmear!.id);
+    if (index != -1) {
+      _draggedSmear = model.smears[index];
+    }
   }
 
   void _dragDoseRate(Offset focalPoint, SurveyMapModel model) {
@@ -759,7 +802,20 @@ class _MapCanvasState extends State<MapCanvas> {
 
     final pagePosition = model.canvasToPage(focalPoint);
     final newPosition = pagePosition - _doseRateDragOffset!;
-    model.updateDoseRatePosition(_draggedDoseRate!, newPosition);
+
+    // Use Direct method to avoid creating undo/redo commands on every frame
+    model.updateDoseRatePositionDirect(_draggedDoseRate!, newPosition);
+
+    // Update reference to the modified dose rate
+    // Since DoseRateAnnotation doesn't have an id, we find by value and unit
+    final index = model.doseRates.indexWhere(
+      (d) => d.value == _draggedDoseRate!.value &&
+             d.unit == _draggedDoseRate!.unit &&
+             d.type == _draggedDoseRate!.type
+    );
+    if (index != -1) {
+      _draggedDoseRate = model.doseRates[index];
+    }
   }
 
   void _dragIcon(Offset focalPoint, SurveyMapModel model) {
@@ -771,7 +827,8 @@ class _MapCanvasState extends State<MapCanvas> {
     final pagePosition = model.canvasToPage(focalPoint);
     final newPosition = pagePosition - _iconDragOffset!;
 
-    model.updateEquipmentPosition(_draggedIcon!, newPosition);
+    // Use Direct method to avoid creating undo/redo commands on every frame
+    model.updateEquipmentPositionDirect(_draggedIcon!, newPosition);
 
     // Update the _draggedIcon reference to the updated equipment (which is now selectedIcon)
     _draggedIcon = model.selectedIcon;

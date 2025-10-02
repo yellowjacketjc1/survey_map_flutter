@@ -31,6 +31,20 @@ class UndoRedoManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Add a command to the undo stack without executing it
+  /// Useful when the action has already been performed (e.g., during drag)
+  void addCommandWithoutExecuting(Command command) {
+    _undoStack.add(command);
+    _redoStack.clear();
+
+    // Limit stack size
+    if (_undoStack.length > _maxStackSize) {
+      _undoStack.removeAt(0);
+    }
+
+    notifyListeners();
+  }
+
   void undo() {
     if (!canUndo) return;
 
