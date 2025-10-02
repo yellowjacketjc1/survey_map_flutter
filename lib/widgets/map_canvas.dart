@@ -28,6 +28,9 @@ class _MapCanvasState extends State<MapCanvas> {
   EquipmentAnnotation? _draggedIcon;
   Offset? _iconDragOffset;
   Offset? _iconDragStartPosition;
+  bool _draggedTitleCard = false;
+  Offset? _titleCardDragOffset;
+  Offset? _titleCardDragStartPosition;
   final Map<String, ui.Image> _iconCache = {};
   double _lastScale = 1.0;
 
@@ -370,6 +373,15 @@ class _MapCanvasState extends State<MapCanvas> {
         }
       }
 
+      // Check for title card drag
+      if (model.isTitleCardAtPosition(pagePosition)) {
+        _draggedTitleCard = true;
+        _titleCardDragOffset = pagePosition - model.titleCard!.position;
+        _titleCardDragStartPosition = model.titleCard!.position;
+        debugPrint('Title card drag started');
+        return;
+      }
+
       // Check for icon drag
       final equipment = model.getEquipmentAtPosition(pagePosition);
       if (equipment != null) {
@@ -404,6 +416,11 @@ class _MapCanvasState extends State<MapCanvas> {
 
   void _handleScaleUpdate(ScaleUpdateDetails details, SurveyMapModel model) {
     debugPrint('ScaleUpdate: pointers=${details.pointerCount}, scale=${details.scale}, focal=${details.focalPoint}');
+
+    if (_draggedTitleCard) {
+      _dragTitleCard(details.focalPoint, model);
+      return;
+    }
 
     if (_draggedSmear != null) {
       _dragSmear(details.focalPoint, model);
@@ -456,7 +473,7 @@ class _MapCanvasState extends State<MapCanvas> {
     final model = context.read<SurveyMapModel>();
 
     // Check if this was a tap (no significant movement)
-    final wasDragging = _draggedSmear != null || _draggedDoseRate != null || _draggedIcon != null || model.isResizing;
+    final wasDragging = _draggedSmear != null || _draggedDoseRate != null || _draggedIcon != null || _draggedTitleCard || model.isResizing;
 
     bool isTap = false;
     double distance = 0;
@@ -515,6 +532,9 @@ class _MapCanvasState extends State<MapCanvas> {
     _draggedIcon = null;
     _iconDragOffset = null;
     _iconDragStartPosition = null;
+    _draggedTitleCard = false;
+    _titleCardDragOffset = null;
+    _titleCardDragStartPosition = null;
     _lastScale = 1.0;
     model.endResize();
   }
@@ -832,6 +852,16 @@ class _MapCanvasState extends State<MapCanvas> {
 
     // Update the _draggedIcon reference to the updated equipment (which is now selectedIcon)
     _draggedIcon = model.selectedIcon;
+  }
+
+  void _dragTitleCard(Offset focalPoint, SurveyMapModel model) {
+    if (!_draggedTitleCard || _titleCardDragOffset == null) return;
+
+    final pagePosition = model.canvasToPage(focalPoint);
+    final newPosition = pagePosition - _titleCardDragOffset!;
+
+    // Update position directly (no undo/redo needed for title card positioning)
+    model.updateTitleCardPosition(newPosition);
   }
 
   void _resizeIcon(Offset focalPoint, SurveyMapModel model) {

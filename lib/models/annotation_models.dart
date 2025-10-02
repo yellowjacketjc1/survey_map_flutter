@@ -313,3 +313,74 @@ enum ResizeHandle {
   sw,
   se,
 }
+
+/// Represents a title card with survey metadata
+class TitleCard {
+  Offset position;
+  String surveyId;
+  String surveyorName;
+  DateTime date;
+  String buildingNumber;
+  String roomNumber;
+  bool visible;
+
+  TitleCard({
+    required this.position,
+    this.surveyId = '',
+    this.surveyorName = '',
+    DateTime? date,
+    this.buildingNumber = '',
+    this.roomNumber = '',
+    this.visible = true,
+  }) : date = date ?? DateTime.now();
+
+  TitleCard copyWith({
+    Offset? position,
+    String? surveyId,
+    String? surveyorName,
+    DateTime? date,
+    String? buildingNumber,
+    String? roomNumber,
+    bool? visible,
+  }) {
+    return TitleCard(
+      position: position ?? this.position,
+      surveyId: surveyId ?? this.surveyId,
+      surveyorName: surveyorName ?? this.surveyorName,
+      date: date ?? this.date,
+      buildingNumber: buildingNumber ?? this.buildingNumber,
+      roomNumber: roomNumber ?? this.roomNumber,
+      visible: visible ?? this.visible,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'x': position.dx,
+      'y': position.dy,
+      'surveyId': surveyId,
+      'surveyorName': surveyorName,
+      'date': date.toIso8601String(),
+      'buildingNumber': buildingNumber,
+      'roomNumber': roomNumber,
+      'visible': visible,
+    };
+  }
+
+  factory TitleCard.fromJson(Map<String, dynamic> json) {
+    return TitleCard(
+      position: Offset(
+        (json['x'] as num).toDouble(),
+        (json['y'] as num).toDouble(),
+      ),
+      surveyId: json['surveyId'] as String? ?? '',
+      surveyorName: json['surveyorName'] as String? ?? '',
+      date: json['date'] != null
+          ? DateTime.parse(json['date'] as String)
+          : DateTime.now(),
+      buildingNumber: json['buildingNumber'] as String? ?? '',
+      roomNumber: json['roomNumber'] as String? ?? '',
+      visible: json['visible'] as bool? ?? true,
+    );
+  }
+}

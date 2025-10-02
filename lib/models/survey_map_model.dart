@@ -24,6 +24,9 @@ class SurveyMapModel extends ChangeNotifier {
   final List<BoundaryAnnotation> _boundaries = [];
   final List<EquipmentAnnotation> _equipment = [];
 
+  // Title Card
+  TitleCard? _titleCard;
+
   // Smear ID counter
   int _nextSmearId = 1;
 
@@ -62,6 +65,7 @@ class SurveyMapModel extends ChangeNotifier {
   List<DoseRateAnnotation> get doseRates => List.unmodifiable(_doseRates);
   List<BoundaryAnnotation> get boundaries => List.unmodifiable(_boundaries);
   List<EquipmentAnnotation> get equipment => List.unmodifiable(_equipment);
+  TitleCard? get titleCard => _titleCard;
   int get nextSmearId => _nextSmearId;
   ToolType get currentTool => _currentTool;
   BoundaryAnnotation? get currentBoundary => _currentBoundary;
@@ -98,6 +102,10 @@ class SurveyMapModel extends ChangeNotifier {
   void setPdfImage(ui.Image image) {
     _pdfImage = image;
     _pdfSize = Size(image.width.toDouble(), image.height.toDouble());
+
+    // Initialize title card if it doesn't exist
+    initializeTitleCard(_pdfSize);
+
     notifyListeners();
   }
 
@@ -534,6 +542,65 @@ class SurveyMapModel extends ChangeNotifier {
     return null;
   }
 
+  // Title Card methods
+  void initializeTitleCard(Size pdfSize) {
+    if (_titleCard == null) {
+      // Position in bottom-right corner with 20px padding
+      _titleCard = TitleCard(
+        position: Offset(pdfSize.width - 250, pdfSize.height - 180),
+      );
+      notifyListeners();
+    }
+  }
+
+  void updateTitleCardField({
+    String? surveyId,
+    String? surveyorName,
+    DateTime? date,
+    String? buildingNumber,
+    String? roomNumber,
+    bool? visible,
+  }) {
+    if (_titleCard != null) {
+      _titleCard = _titleCard!.copyWith(
+        surveyId: surveyId,
+        surveyorName: surveyorName,
+        date: date,
+        buildingNumber: buildingNumber,
+        roomNumber: roomNumber,
+        visible: visible,
+      );
+      notifyListeners();
+    }
+  }
+
+  void updateTitleCardPosition(Offset newPosition) {
+    if (_titleCard != null) {
+      _titleCard = _titleCard!.copyWith(position: newPosition);
+      notifyListeners();
+    }
+  }
+
+  void toggleTitleCardVisibility() {
+    if (_titleCard != null) {
+      _titleCard = _titleCard!.copyWith(visible: !_titleCard!.visible);
+      notifyListeners();
+    }
+  }
+
+  bool isTitleCardAtPosition(Offset position) {
+    if (_titleCard == null || !_titleCard!.visible) return false;
+
+    // Title card is approximately 240x160 pixels
+    const width = 240.0;
+    const height = 160.0;
+
+    return position.dx >= _titleCard!.position.dx &&
+        position.dx <= _titleCard!.position.dx + width &&
+        position.dy >= _titleCard!.position.dy &&
+        position.dy <= _titleCard!.position.dy + height;
+  }
+
   // Icon selection
   void selectIcon(EquipmentAnnotation? icon) {
     _selectedIcon = icon;
@@ -622,6 +689,7 @@ class SurveyMapModel extends ChangeNotifier {
       'doseRates': _doseRates.map((d) => d.toJson()).toList(),
       'boundaries': _boundaries.map((b) => b.toJson()).toList(),
       'equipment': _equipment.map((e) => e.toJson()).toList(),
+      'titleCard': _titleCard?.toJson(),
       'nextSmearId': _nextSmearId,
       'pdfBytes': _pdfBytes != null ? base64Encode(_pdfBytes!) : null,
     };
@@ -669,6 +737,10 @@ class SurveyMapModel extends ChangeNotifier {
       for (final equipmentJson in json['equipment'] as List) {
         _equipment.add(EquipmentAnnotation.fromJson(equipmentJson as Map<String, dynamic>));
       }
+    }
+
+    if (json['titleCard'] != null) {
+      _titleCard = TitleCard.fromJson(json['titleCard'] as Map<String, dynamic>);
     }
 
     _nextSmearId = (json['nextSmearId'] as int?) ?? 1;

@@ -58,6 +58,8 @@ class EditingPanel extends StatelessWidget {
                 return ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    _buildTitleCardSection(context, model),
+                    const SizedBox(height: 16),
                     _buildSmearSection(context, model),
                     const SizedBox(height: 16),
                     _buildDoseRateSection(context, model),
@@ -74,6 +76,135 @@ class EditingPanel extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTitleCardSection(BuildContext context, SurveyMapModel model) {
+    final titleCard = model.titleCard;
+    if (titleCard == null) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'Title Card',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const Spacer(),
+            IconButton(
+              icon: Icon(
+                titleCard.visible ? Icons.visibility : Icons.visibility_off,
+                size: 20,
+              ),
+              color: titleCard.visible ? Colors.blue : Colors.grey,
+              tooltip: titleCard.visible ? 'Hide Title Card' : 'Show Title Card',
+              onPressed: () => model.toggleTitleCardVisibility(),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                decoration: const InputDecoration(
+                  labelText: 'Survey ID #',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                controller: TextEditingController(text: titleCard.surveyId)
+                  ..selection = TextSelection.fromPosition(
+                    TextPosition(offset: titleCard.surveyId.length),
+                  ),
+                onChanged: (value) => model.updateTitleCardField(surveyId: value),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                decoration: const InputDecoration(
+                  labelText: 'Surveyor Name',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                controller: TextEditingController(text: titleCard.surveyorName)
+                  ..selection = TextSelection.fromPosition(
+                    TextPosition(offset: titleCard.surveyorName.length),
+                  ),
+                onChanged: (value) => model.updateTitleCardField(surveyorName: value),
+              ),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () async {
+                  final date = await showDatePicker(
+                    context: context,
+                    initialDate: titleCard.date,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (date != null) {
+                    model.updateTitleCardField(date: date);
+                  }
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Date',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    suffixIcon: Icon(Icons.calendar_today, size: 18),
+                  ),
+                  child: Text(
+                    '${titleCard.date.month}/${titleCard.date.day}/${titleCard.date.year}',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Building #',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      controller: TextEditingController(text: titleCard.buildingNumber)
+                        ..selection = TextSelection.fromPosition(
+                          TextPosition(offset: titleCard.buildingNumber.length),
+                        ),
+                      onChanged: (value) => model.updateTitleCardField(buildingNumber: value),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Room #',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      controller: TextEditingController(text: titleCard.roomNumber)
+                        ..selection = TextSelection.fromPosition(
+                          TextPosition(offset: titleCard.roomNumber.length),
+                        ),
+                      onChanged: (value) => model.updateTitleCardField(roomNumber: value),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

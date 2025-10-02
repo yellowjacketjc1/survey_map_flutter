@@ -71,6 +71,11 @@ class MapPainter extends CustomPainter {
       _drawCurrentBoundary(canvas, model.currentBoundary!);
     }
 
+    // Draw title card
+    if (model.titleCard != null && model.titleCard!.visible) {
+      _drawTitleCard(canvas, model.titleCard!);
+    }
+
     canvas.restore();
   }
 
@@ -322,6 +327,110 @@ class MapPainter extends CustomPainter {
         patternIndex++;
       }
     }
+  }
+
+  void _drawTitleCard(Canvas canvas, TitleCard titleCard) {
+    const cardWidth = 240.0;
+    const cardHeight = 160.0;
+    final cardRect = Rect.fromLTWH(
+      titleCard.position.dx,
+      titleCard.position.dy,
+      cardWidth,
+      cardHeight,
+    );
+
+    // Draw card background with border
+    final bgPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+
+    final borderPaint = Paint()
+      ..color = Colors.black
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+
+    canvas.drawRect(cardRect, bgPaint);
+    canvas.drawRect(cardRect, borderPaint);
+
+    // Draw header
+    final headerRect = Rect.fromLTWH(
+      titleCard.position.dx,
+      titleCard.position.dy,
+      cardWidth,
+      30,
+    );
+
+    final headerPaint = Paint()
+      ..color = Colors.blue.shade700
+      ..style = PaintingStyle.fill;
+
+    canvas.drawRect(headerRect, headerPaint);
+
+    // Draw "Survey Information" title
+    final titlePainter = TextPainter(
+      text: const TextSpan(
+        text: 'Survey Information',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    titlePainter.layout();
+    titlePainter.paint(
+      canvas,
+      Offset(titleCard.position.dx + 8, titleCard.position.dy + 8),
+    );
+
+    // Draw fields
+    double yOffset = titleCard.position.dy + 40;
+    const lineHeight = 24.0;
+
+    _drawField(canvas, 'Survey ID:', titleCard.surveyId, titleCard.position.dx + 8, yOffset);
+    yOffset += lineHeight;
+
+    _drawField(canvas, 'Surveyor:', titleCard.surveyorName, titleCard.position.dx + 8, yOffset);
+    yOffset += lineHeight;
+
+    final dateStr = '${titleCard.date.month}/${titleCard.date.day}/${titleCard.date.year}';
+    _drawField(canvas, 'Date:', dateStr, titleCard.position.dx + 8, yOffset);
+    yOffset += lineHeight;
+
+    _drawField(canvas, 'Building:', titleCard.buildingNumber, titleCard.position.dx + 8, yOffset);
+    yOffset += lineHeight;
+
+    _drawField(canvas, 'Room:', titleCard.roomNumber, titleCard.position.dx + 8, yOffset);
+  }
+
+  void _drawField(Canvas canvas, String label, String value, double x, double y) {
+    final labelPainter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: const TextStyle(
+          color: Colors.black87,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    labelPainter.layout();
+    labelPainter.paint(canvas, Offset(x, y));
+
+    final valuePainter = TextPainter(
+      text: TextSpan(
+        text: value.isEmpty ? '—' : value,
+        style: TextStyle(
+          color: value.isEmpty ? Colors.grey : Colors.black,
+          fontSize: 11,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    valuePainter.layout();
+    valuePainter.paint(canvas, Offset(x + 70, y));
   }
 
   @override
