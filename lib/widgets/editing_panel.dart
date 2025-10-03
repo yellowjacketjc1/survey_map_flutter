@@ -295,7 +295,7 @@ class EditingPanel extends StatelessWidget {
         if (model.currentTool == ToolType.doseAdd) ...[
           const SizedBox(height: 8),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.grey.shade100,
               borderRadius: BorderRadius.circular(4),
@@ -303,79 +303,97 @@ class EditingPanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: TextField(
-                        decoration: const InputDecoration(
-                          labelText: 'Value',
-                          border: OutlineInputBorder(),
-                          isDense: true,
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          decoration: const InputDecoration(
+                            labelText: 'Value',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          keyboardType: TextInputType.number,
+                          onChanged: (value) {
+                            final parsed = double.tryParse(value);
+                            if (parsed != null) {
+                              model.setDoseValue(parsed);
+                            }
+                          },
                         ),
-                        keyboardType: TextInputType.number,
-                        onChanged: (value) {
-                          final parsed = double.tryParse(value);
-                          if (parsed != null) {
-                            model.setDoseValue(parsed);
-                          }
-                        },
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: model.doseUnit,
-                        decoration: const InputDecoration(
-                          labelText: 'Unit',
-                          border: OutlineInputBorder(),
-                          isDense: true,
+                      const SizedBox(width: 2),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: model.doseUnit,
+                          decoration: const InputDecoration(
+                            labelText: 'Unit',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'μR/hr', child: Text('μR/hr')),
+                            DropdownMenuItem(
+                                value: 'mR/hr', child: Text('mR/hr')),
+                            DropdownMenuItem(value: 'R/hr', child: Text('R/hr')),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              model.setDoseUnit(value);
+                            }
+                          },
                         ),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'μR/hr', child: Text('μR/hr')),
-                          DropdownMenuItem(
-                              value: 'mR/hr', child: Text('mR/hr')),
-                          DropdownMenuItem(value: 'R/hr', child: Text('R/hr')),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            model.setDoseUnit(value);
-                          }
-                        },
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Expanded(
-                      child: RadioListTile<DoseType>(
-                        title: const Text('Gamma'),
-                        value: DoseType.gamma,
-                        groupValue: model.doseType,
-                        onChanged: (value) {
-                          if (value != null) {
-                            model.setDoseType(value);
-                          }
-                        },
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
+                    Flexible(
+                      child: InkWell(
+                        onTap: () => model.setDoseType(DoseType.gamma),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Radio<DoseType>(
+                              value: DoseType.gamma,
+                              groupValue: model.doseType,
+                              onChanged: (value) {
+                                if (value != null) {
+                                  model.setDoseType(value);
+                                }
+                              },
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            const Text('Gamma', style: TextStyle(fontSize: 13)),
+                          ],
+                        ),
                       ),
                     ),
-                    Expanded(
-                      child: RadioListTile<DoseType>(
-                        title: const Text('Neutron'),
-                        value: DoseType.neutron,
-                        groupValue: model.doseType,
-                        onChanged: (value) {
-                          if (value != null) {
-                            model.setDoseType(value);
-                          }
-                        },
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: InkWell(
+                        onTap: () => model.setDoseType(DoseType.neutron),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Radio<DoseType>(
+                              value: DoseType.neutron,
+                              groupValue: model.doseType,
+                              onChanged: (value) {
+                                if (value != null) {
+                                  model.setDoseType(value);
+                                }
+                              },
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            const Text('Neutron', style: TextStyle(fontSize: 13)),
+                          ],
+                        ),
                       ),
                     ),
                   ],
