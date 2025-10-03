@@ -33,6 +33,9 @@ dependencies:
   path_provider: ^2.1.1
   vector_graphics: ^1.1.19
 
+  # HTTP requests for web
+  http: ^1.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -46,3 +49,4 @@ flutter:
     - assets/icons/
     - assets/Postings/
     - assets/postings.json
+    - assets/building_maps.json

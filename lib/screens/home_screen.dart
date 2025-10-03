@@ -1,9 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
 import '../models/survey_map_model.dart';
+import '../models/building_map_model.dart';
 import '../services/pdf_service.dart';
 import '../services/icon_loader.dart';
 import '../services/export_service.dart';
@@ -11,6 +15,7 @@ import '../services/pdf_export_service.dart';
 import '../widgets/map_canvas.dart';
 import '../widgets/controls_panel.dart';
 import '../widgets/editing_panel.dart';
+import '../widgets/map_browser_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -64,6 +69,74 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _browseMaps() async {
+    final selectedMap = await showDialog<BuildingMap>(
+      context: context,
+      builder: (context) => const MapBrowserDialog(),
+    );
+
+    if (selectedMap != null && mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        Uint8List pdfBytes;
+
+        if (kIsWeb) {
+          // On web, load from HTTP server
+          // Remove "Current Maps/" prefix since the server is already serving from that directory
+          final relativePath = selectedMap.filePath.replaceFirst('Current Maps/', '');
+          final url = 'http://localhost:8000/$relativePath';
+          print('Loading map from: $url');
+          final response = await http.get(Uri.parse(url));
+
+          if (response.statusCode == 200) {
+            pdfBytes = response.bodyBytes;
+          } else {
+            throw Exception('Failed to load map from server. Make sure to run: python3 serve_maps.py');
+          }
+        } else {
+          // On desktop, use file picker to grant access
+          final result = await FilePicker.platform.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: ['pdf'],
+            dialogTitle: 'Select: ${selectedMap.building} - ${selectedMap.room}',
+            initialDirectory: '/Users/coyle/Documents/Coding Projects/survey_map_flutter/Current Maps/${selectedMap.building}',
+          );
+
+          if (result == null) return;
+          pdfBytes = result.files.single.bytes ?? await File(result.files.single.path!).readAsBytes();
+        }
+
+        if (mounted) {
+          final model = context.read<SurveyMapModel>();
+          model.setPdfBytes(pdfBytes);
+
+          final image = await PdfService.loadPdfPage(pdfBytes);
+          if (image != null) {
+            model.setPdfImage(image);
+            // Pre-fill the title card with building/room info
+            model.updateTitleCardField(
+              buildingNumber: selectedMap.building.replaceAll('Building ', ''),
+              roomNumber: selectedMap.room,
+            );
+          } else {
+            _showError('Failed to load PDF page');
+          }
+        }
+      } catch (e) {
+        _showError('Error loading map: $e');
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
     }
   }
 
@@ -344,17 +417,44 @@ class _HomeScreenState extends State<HomeScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: _pickAndLoadPdf,
-                    icon: const Icon(Icons.upload_file),
-                    label: const Text('Choose File'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: _browseMaps,
+                        icon: const Icon(Icons.folder_open),
+                        label: const Text('Browse Maps'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 32,
+                            vertical: 16,
+                          ),
+                          textStyle: const TextStyle(fontSize: 16),
+                        ),
                       ),
-                      textStyle: const TextStyle(fontSize: 16),
+                      const SizedBox(width: 16),
+                      ElevatedButton.icon(
+                        onPressed: _pickAndLoadPdf,
+                        icon: const Icon(Icons.upload_file),
+                        label: const Text('Upload File'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 32,
+                            vertical: 16,
+                          ),
+                          textStyle: const TextStyle(fontSize: 16),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Browse from pre-defined building maps or upload your own PDF',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
                     ),
+                    textAlign: TextAlign.center,
                   ),
                 ],
               ),

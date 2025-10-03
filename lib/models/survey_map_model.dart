@@ -231,6 +231,7 @@ class SurveyMapModel extends ChangeNotifier {
 
   void removeSmearDirect(SmearAnnotation smear) {
     _smears.remove(smear);
+    renumberSmears();
     notifyListeners();
   }
 
