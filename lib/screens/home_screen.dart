@@ -3,9 +3,9 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle, ByteData;
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:http/http.dart' as http;
 import '../models/survey_map_model.dart';
 import '../models/building_map_model.dart';
 import '../services/pdf_service.dart';
@@ -16,7 +16,6 @@ import '../widgets/map_canvas.dart';
 import '../widgets/controls_panel.dart';
 import '../widgets/editing_panel.dart';
 import '../widgets/map_browser_dialog.dart';
-import '../config/map_config.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -88,37 +87,10 @@ class _HomeScreenState extends State<HomeScreen> {
         Uint8List pdfBytes;
 
         if (kIsWeb) {
-          // On web, load from configured hosting location
-          final relativePath = selectedMap.filePath.replaceFirst('Current Maps/', '');
-          final baseUrl = MapConfig.getBaseUrl();
-
-          String url;
-          Map<String, String> headers = {};
-
-          if (MapConfig.hostingType == MapHostingType.box) {
-            // Box uses a simple shared folder approach
-            // The baseUrl should be the full shared link from Box
-            // relativePath is the file path within that folder
-            url = '$baseUrl/$relativePath';
-          } else if (MapConfig.hostingType == MapHostingType.sharePoint) {
-            // SharePoint requires URL encoding and specific format
-            final encodedPath = Uri.encodeComponent(relativePath);
-            url = '$baseUrl/$encodedPath?download=1';
-          } else {
-            // Local server or other hosting
-            url = '$baseUrl/$relativePath';
-          }
-
-          print('Loading map from: $url');
-          final response = headers.isEmpty
-              ? await http.get(Uri.parse(url))
-              : await http.get(Uri.parse(url), headers: headers);
-
-          if (response.statusCode == 200) {
-            pdfBytes = response.bodyBytes;
-          } else {
-            throw Exception('Failed to load map (Status ${response.statusCode}). Check MapConfig settings.');
-          }
+          // On web, load from bundled assets
+          print('Loading map from assets: ${selectedMap.filePath}');
+          final ByteData data = await rootBundle.load(selectedMap.filePath);
+          pdfBytes = data.buffer.asUint8List();
         } else {
           // On desktop, use file picker to grant access
           final result = await FilePicker.platform.pickFiles(
