@@ -71,6 +71,11 @@ class MapPainter extends CustomPainter {
       _drawCurrentBoundary(canvas, model.currentBoundary!);
     }
 
+    // Draw comments
+    for (final comment in model.comments) {
+      _drawComment(canvas, comment);
+    }
+
     // Draw title card
     if (model.titleCard != null && model.titleCard!.visible) {
       _drawTitleCard(canvas, model.titleCard!);
@@ -431,6 +436,69 @@ class MapPainter extends CustomPainter {
     );
     valuePainter.layout();
     valuePainter.paint(canvas, Offset(x + 70, y));
+  }
+
+  void _drawComment(Canvas canvas, CommentAnnotation comment) {
+    final bubblePaint = Paint()
+      ..color = Colors.lightBlue.shade100
+      ..style = PaintingStyle.fill;
+
+    final bubbleStrokePaint = Paint()
+      ..color = Colors.blue.shade700
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+
+    // Create speech bubble path
+    final path = Path();
+    final center = comment.position;
+    final width = 36.0;
+    final height = 28.0;
+    final tailSize = 6.0;
+    final cornerRadius = 8.0;
+
+    // Main rounded rectangle bubble
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+        center: center,
+        width: width,
+        height: height,
+      ),
+      Radius.circular(cornerRadius),
+    );
+    path.addRRect(rect);
+
+    // Add small tail pointing down-left
+    final tailPath = Path();
+    tailPath.moveTo(center.dx - 8, center.dy + height / 2);
+    tailPath.lineTo(center.dx - 12, center.dy + height / 2 + tailSize);
+    tailPath.lineTo(center.dx - 6, center.dy + height / 2);
+    tailPath.close();
+    path.addPath(tailPath, Offset.zero);
+
+    // Draw the bubble
+    canvas.drawPath(path, bubblePaint);
+    canvas.drawPath(path, bubbleStrokePaint);
+
+    // Draw comment ID number
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: comment.id.toString(),
+        style: TextStyle(
+          color: Colors.blue.shade900,
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(
+        center.dx - textPainter.width / 2,
+        center.dy - textPainter.height / 2,
+      ),
+    );
   }
 
   @override

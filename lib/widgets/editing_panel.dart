@@ -66,6 +66,8 @@ class EditingPanel extends StatelessWidget {
                     const SizedBox(height: 16),
                     _buildBoundarySection(context, model),
                     const SizedBox(height: 16),
+                    _buildCommentSection(context, model),
+                    const SizedBox(height: 16),
                     _buildEquipmentSection(context, model),
                     const SizedBox(height: 16),
                     _buildClearAllSection(context, model),
@@ -438,6 +440,110 @@ class EditingPanel extends StatelessWidget {
             ),
           ],
         ),
+      ],
+    );
+  }
+
+  Widget _buildCommentSection(BuildContext context, SurveyMapModel model) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'Comments/Notes',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${model.comments.length}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black54,
+                ),
+              ),
+            ),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.add_circle, size: 20),
+              color: model.currentTool == ToolType.commentAdd
+                  ? Colors.blue
+                  : Colors.grey,
+              tooltip: 'Add Comment',
+              onPressed: () {
+                debugPrint('Comment Add button pressed');
+                model.setTool(ToolType.commentAdd);
+                debugPrint('Current tool after setTool: ${model.currentTool}');
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.remove_circle, size: 20),
+              color: model.currentTool == ToolType.commentRemove
+                  ? Colors.blue
+                  : Colors.grey,
+              tooltip: 'Remove Comment',
+              onPressed: () => model.setTool(ToolType.commentRemove),
+            ),
+          ],
+        ),
+        if (model.comments.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Column(
+              children: model.comments.map((comment) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade100,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.blue.shade700, width: 2),
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${comment.id}',
+                            style: TextStyle(
+                              color: Colors.blue.shade900,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          comment.text,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
       ],
     );
   }

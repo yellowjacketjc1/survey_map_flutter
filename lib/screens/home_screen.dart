@@ -16,6 +16,7 @@ import '../widgets/map_canvas.dart';
 import '../widgets/controls_panel.dart';
 import '../widgets/editing_panel.dart';
 import '../widgets/map_browser_dialog.dart';
+import '../config/map_config.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -87,17 +88,36 @@ class _HomeScreenState extends State<HomeScreen> {
         Uint8List pdfBytes;
 
         if (kIsWeb) {
-          // On web, load from HTTP server
-          // Remove "Current Maps/" prefix since the server is already serving from that directory
+          // On web, load from configured hosting location
           final relativePath = selectedMap.filePath.replaceFirst('Current Maps/', '');
-          final url = 'http://localhost:8000/$relativePath';
+          final baseUrl = MapConfig.getBaseUrl();
+
+          String url;
+          Map<String, String> headers = {};
+
+          if (MapConfig.hostingType == MapHostingType.box) {
+            // Box uses a simple shared folder approach
+            // The baseUrl should be the full shared link from Box
+            // relativePath is the file path within that folder
+            url = '$baseUrl/$relativePath';
+          } else if (MapConfig.hostingType == MapHostingType.sharePoint) {
+            // SharePoint requires URL encoding and specific format
+            final encodedPath = Uri.encodeComponent(relativePath);
+            url = '$baseUrl/$encodedPath?download=1';
+          } else {
+            // Local server or other hosting
+            url = '$baseUrl/$relativePath';
+          }
+
           print('Loading map from: $url');
-          final response = await http.get(Uri.parse(url));
+          final response = headers.isEmpty
+              ? await http.get(Uri.parse(url))
+              : await http.get(Uri.parse(url), headers: headers);
 
           if (response.statusCode == 200) {
             pdfBytes = response.bodyBytes;
           } else {
-            throw Exception('Failed to load map from server. Make sure to run: python3 serve_maps.py');
+            throw Exception('Failed to load map (Status ${response.statusCode}). Check MapConfig settings.');
           }
         } else {
           // On desktop, use file picker to grant access

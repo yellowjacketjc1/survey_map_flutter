@@ -54,6 +54,65 @@ class PdfExportService {
         ),
       );
 
+      // Add comments page if there are comments
+      if (model.comments.isNotEmpty) {
+        debugPrint('Adding comments page...');
+        pdf.addPage(
+          pw.Page(
+            pageFormat: PdfPageFormat.letter,
+            build: (context) {
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Comments / Notes',
+                    style: pw.TextStyle(
+                      fontSize: 24,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 20),
+                  ...model.comments.map((comment) {
+                    return pw.Padding(
+                      padding: const pw.EdgeInsets.only(bottom: 12),
+                      child: pw.Row(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Container(
+                            width: 30,
+                            height: 30,
+                            decoration: pw.BoxDecoration(
+                              border: pw.Border.all(width: 2),
+                              shape: pw.BoxShape.circle,
+                            ),
+                            child: pw.Center(
+                              child: pw.Text(
+                                '${comment.id}',
+                                style: pw.TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                          pw.SizedBox(width: 12),
+                          pw.Expanded(
+                            child: pw.Text(
+                              comment.text,
+                              style: const pw.TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ],
+              );
+            },
+          ),
+        );
+      }
+
       debugPrint('Saving PDF...');
       final pdfBytes = await pdf.save();
       debugPrint('PDF saved: ${pdfBytes.length} bytes');
@@ -117,6 +176,65 @@ class PdfExportService {
           },
         ),
       );
+
+      // Add comments page if there are comments
+      if (model.comments.isNotEmpty) {
+        debugPrint('Adding comments page...');
+        pdf.addPage(
+          pw.Page(
+            pageFormat: PdfPageFormat.letter,
+            build: (context) {
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Comments / Notes',
+                    style: pw.TextStyle(
+                      fontSize: 24,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 20),
+                  ...model.comments.map((comment) {
+                    return pw.Padding(
+                      padding: const pw.EdgeInsets.only(bottom: 12),
+                      child: pw.Row(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Container(
+                            width: 30,
+                            height: 30,
+                            decoration: pw.BoxDecoration(
+                              border: pw.Border.all(width: 2),
+                              shape: pw.BoxShape.circle,
+                            ),
+                            child: pw.Center(
+                              child: pw.Text(
+                                '${comment.id}',
+                                style: pw.TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                          pw.SizedBox(width: 12),
+                          pw.Expanded(
+                            child: pw.Text(
+                              comment.text,
+                              style: const pw.TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ],
+              );
+            },
+          ),
+        );
+      }
 
       debugPrint('Saving PDF...');
       final pdfBytes = await pdf.save();

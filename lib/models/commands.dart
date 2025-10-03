@@ -289,3 +289,89 @@ class ResizeEquipmentCommand extends Command {
   @override
   String get description => 'Resize Equipment';
 }
+
+// Comment Commands
+class AddCommentCommand extends Command {
+  final SurveyMapModel model;
+  final CommentAnnotation comment;
+
+  AddCommentCommand(this.model, this.comment);
+
+  @override
+  void execute() {
+    model.addCommentDirect(comment);
+  }
+
+  @override
+  void undo() {
+    model.removeCommentDirect(comment);
+  }
+
+  @override
+  String get description => 'Add Comment ${comment.id}';
+}
+
+class RemoveCommentCommand extends Command {
+  final SurveyMapModel model;
+  final CommentAnnotation comment;
+  final int originalIndex;
+
+  RemoveCommentCommand(this.model, this.comment, this.originalIndex);
+
+  @override
+  void execute() {
+    model.removeCommentDirect(comment);
+  }
+
+  @override
+  void undo() {
+    model.addCommentDirectAt(comment, originalIndex);
+  }
+
+  @override
+  String get description => 'Remove Comment ${comment.id}';
+}
+
+class MoveCommentCommand extends Command {
+  final SurveyMapModel model;
+  final CommentAnnotation comment;
+  final Offset oldPosition;
+  final Offset newPosition;
+
+  MoveCommentCommand(this.model, this.comment, this.oldPosition, this.newPosition);
+
+  @override
+  void execute() {
+    model.updateCommentPositionDirect(comment, newPosition);
+  }
+
+  @override
+  void undo() {
+    model.updateCommentPositionDirect(comment, oldPosition);
+  }
+
+  @override
+  String get description => 'Move Comment ${comment.id}';
+}
+
+class EditCommentCommand extends Command {
+  final SurveyMapModel model;
+  final CommentAnnotation oldComment;
+  final CommentAnnotation newComment;
+  final int index;
+
+  EditCommentCommand(this.model, this.oldComment, this.newComment, this.index);
+
+  @override
+  void execute() {
+    model.updateCommentAt(index, newComment);
+  }
+
+  @override
+  void undo() {
+    model.updateCommentAt(index, oldComment);
+  }
+
+  @override
+  String get description => 'Edit Comment ${newComment.id}';
+}

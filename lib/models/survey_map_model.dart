@@ -23,12 +23,16 @@ class SurveyMapModel extends ChangeNotifier {
   final List<DoseRateAnnotation> _doseRates = [];
   final List<BoundaryAnnotation> _boundaries = [];
   final List<EquipmentAnnotation> _equipment = [];
+  final List<CommentAnnotation> _comments = [];
 
   // Title Card
   TitleCard? _titleCard;
 
   // Smear ID counter
   int _nextSmearId = 1;
+
+  // Comment ID counter
+  int _nextCommentId = 1;
 
   // Current tool
   ToolType _currentTool = ToolType.none;
@@ -65,8 +69,10 @@ class SurveyMapModel extends ChangeNotifier {
   List<DoseRateAnnotation> get doseRates => List.unmodifiable(_doseRates);
   List<BoundaryAnnotation> get boundaries => List.unmodifiable(_boundaries);
   List<EquipmentAnnotation> get equipment => List.unmodifiable(_equipment);
+  List<CommentAnnotation> get comments => List.unmodifiable(_comments);
   TitleCard? get titleCard => _titleCard;
   int get nextSmearId => _nextSmearId;
+  int get nextCommentId => _nextCommentId;
   ToolType get currentTool => _currentTool;
   BoundaryAnnotation? get currentBoundary => _currentBoundary;
   double get doseValue => _doseValue;
@@ -650,6 +656,89 @@ class SurveyMapModel extends ChangeNotifier {
     return null;
   }
 
+  // Comment methods (with undo/redo)
+  void addComment(Offset position, String text) {
+    final comment = CommentAnnotation(
+      id: _nextCommentId++,
+      position: position,
+      text: text,
+    );
+    undoRedoManager.executeCommand(AddCommentCommand(this, comment));
+    debugPrint('✓ Comment added at $position, total: ${_comments.length}');
+  }
+
+  void removeComment(CommentAnnotation comment) {
+    final index = _comments.indexOf(comment);
+    if (index != -1) {
+      undoRedoManager.executeCommand(RemoveCommentCommand(this, comment, index));
+    }
+  }
+
+  void updateCommentPosition(CommentAnnotation comment, Offset newPosition) {
+    final oldPosition = comment.position;
+    if (oldPosition != newPosition) {
+      undoRedoManager.executeCommand(MoveCommentCommand(this, comment, oldPosition, newPosition));
+    }
+  }
+
+  void editComment(CommentAnnotation oldComment, String newText) {
+    final index = _comments.indexOf(oldComment);
+    if (index != -1) {
+      final newComment = oldComment.copyWith(text: newText);
+      undoRedoManager.executeCommand(EditCommentCommand(this, oldComment, newComment, index));
+    }
+  }
+
+  // Direct methods (used by commands, no undo/redo)
+  void addCommentDirect(CommentAnnotation comment) {
+    _comments.add(comment);
+    notifyListeners();
+  }
+
+  void addCommentDirectAt(CommentAnnotation comment, int index) {
+    _comments.insert(index, comment);
+    notifyListeners();
+  }
+
+  void removeCommentDirect(CommentAnnotation comment) {
+    _comments.remove(comment);
+    renumberComments();
+    notifyListeners();
+  }
+
+  void updateCommentPositionDirect(CommentAnnotation comment, Offset newPosition) {
+    final index = _comments.indexOf(comment);
+    if (index != -1) {
+      _comments[index] = comment.copyWith(position: newPosition);
+      notifyListeners();
+    }
+  }
+
+  void updateCommentAt(int index, CommentAnnotation comment) {
+    if (index >= 0 && index < _comments.length) {
+      _comments[index] = comment;
+      notifyListeners();
+    }
+  }
+
+  void renumberComments() {
+    _comments.sort((a, b) => a.id.compareTo(b.id));
+    for (int i = 0; i < _comments.length; i++) {
+      _comments[i] = _comments[i].copyWith(id: i + 1);
+    }
+    _nextCommentId = _comments.length + 1;
+  }
+
+  CommentAnnotation? getCommentAtPosition(Offset position, double threshold) {
+    for (final comment in _comments.reversed) {
+      final distance = (comment.position - position).distance;
+      if (distance < threshold) {
+        return comment;
+      }
+    }
+    return null;
+  }
+
   // Icon library
   void setIconLibrary(List<IconMetadata> icons) {
     _iconLibrary.clear();
@@ -673,8 +762,10 @@ class SurveyMapModel extends ChangeNotifier {
     _doseRates.clear();
     _boundaries.clear();
     _equipment.clear();
+    _comments.clear();
     _currentBoundary = null;
     _nextSmearId = 1;
+    _nextCommentId = 1;
     _selectedIcon = null;
     notifyListeners();
   }
@@ -690,8 +781,10 @@ class SurveyMapModel extends ChangeNotifier {
       'doseRates': _doseRates.map((d) => d.toJson()).toList(),
       'boundaries': _boundaries.map((b) => b.toJson()).toList(),
       'equipment': _equipment.map((e) => e.toJson()).toList(),
+      'comments': _comments.map((c) => c.toJson()).toList(),
       'titleCard': _titleCard?.toJson(),
       'nextSmearId': _nextSmearId,
+      'nextCommentId': _nextCommentId,
       'pdfBytes': _pdfBytes != null ? base64Encode(_pdfBytes!) : null,
     };
   }
@@ -702,6 +795,7 @@ class SurveyMapModel extends ChangeNotifier {
     _doseRates.clear();
     _boundaries.clear();
     _equipment.clear();
+    _comments.clear();
     undoRedoManager.clear();
 
     // Load data
@@ -740,11 +834,18 @@ class SurveyMapModel extends ChangeNotifier {
       }
     }
 
+    if (json['comments'] != null) {
+      for (final commentJson in json['comments'] as List) {
+        _comments.add(CommentAnnotation.fromJson(commentJson as Map<String, dynamic>));
+      }
+    }
+
     if (json['titleCard'] != null) {
       _titleCard = TitleCard.fromJson(json['titleCard'] as Map<String, dynamic>);
     }
 
     _nextSmearId = (json['nextSmearId'] as int?) ?? 1;
+    _nextCommentId = (json['nextCommentId'] as int?) ?? 1;
 
     // Load PDF if available
     if (json['pdfBytes'] != null) {

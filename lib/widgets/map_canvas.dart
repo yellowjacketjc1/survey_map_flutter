@@ -28,6 +28,9 @@ class _MapCanvasState extends State<MapCanvas> {
   EquipmentAnnotation? _draggedIcon;
   Offset? _iconDragOffset;
   Offset? _iconDragStartPosition;
+  CommentAnnotation? _draggedComment;
+  Offset? _commentDragOffset;
+  Offset? _commentDragStartPosition;
   bool _draggedTitleCard = false;
   Offset? _titleCardDragOffset;
   Offset? _titleCardDragStartPosition;
@@ -218,7 +221,7 @@ class _MapCanvasState extends State<MapCanvas> {
   }
 
   MouseCursor _getCursor(SurveyMapModel model) {
-    if (_draggedSmear != null || _draggedDoseRate != null || _draggedIcon != null) {
+    if (_draggedSmear != null || _draggedDoseRate != null || _draggedIcon != null || _draggedComment != null) {
       return SystemMouseCursors.grabbing;
     }
 
@@ -226,11 +229,13 @@ class _MapCanvasState extends State<MapCanvas> {
       case ToolType.smearAdd:
       case ToolType.doseAdd:
       case ToolType.boundary:
+      case ToolType.commentAdd:
         return SystemMouseCursors.precise;
       case ToolType.smearRemove:
       case ToolType.doseRemove:
       case ToolType.boundaryDelete:
       case ToolType.equipmentDelete:
+      case ToolType.commentRemove:
         return SystemMouseCursors.click;
       default:
         return SystemMouseCursors.grab;
@@ -316,6 +321,12 @@ class _MapCanvasState extends State<MapCanvas> {
       return;
     }
 
+    if (model.currentTool == ToolType.commentAdd) {
+      debugPrint('Adding comment at $pagePosition');
+      _showAddCommentDialog(model, pagePosition);
+      return;
+    }
+
     // Handle smear removal
     if (model.currentTool == ToolType.smearRemove) {
       final smear = model.getSmearAtPosition(pagePosition, 40 / model.scale);
@@ -330,6 +341,15 @@ class _MapCanvasState extends State<MapCanvas> {
       final dose = model.getDoseRateAtPosition(pagePosition, 50 / model.scale);
       if (dose != null) {
         model.removeDoseRate(dose);
+      }
+      return;
+    }
+
+    // Handle comment removal
+    if (model.currentTool == ToolType.commentRemove) {
+      final comment = model.getCommentAtPosition(pagePosition, 40 / model.scale);
+      if (comment != null) {
+        model.removeComment(comment);
       }
       return;
     }
@@ -411,6 +431,16 @@ class _MapCanvasState extends State<MapCanvas> {
         debugPrint('Dose rate drag started: ${doseRate.position}');
         return;
       }
+
+      // Check for comment drag (increased threshold for easier grabbing)
+      final comment = model.getCommentAtPosition(pagePosition, 40 / model.scale);
+      if (comment != null) {
+        _draggedComment = comment;
+        _commentDragOffset = pagePosition - comment.position;
+        _commentDragStartPosition = comment.position;
+        debugPrint('Comment drag started: ${comment.position}');
+        return;
+      }
     }
   }
 
@@ -434,6 +464,11 @@ class _MapCanvasState extends State<MapCanvas> {
 
     if (_draggedIcon != null) {
       _dragIcon(details.focalPoint, model);
+      return;
+    }
+
+    if (_draggedComment != null) {
+      _dragComment(details.focalPoint, model);
       return;
     }
 
@@ -473,7 +508,7 @@ class _MapCanvasState extends State<MapCanvas> {
     final model = context.read<SurveyMapModel>();
 
     // Check if this was a tap (no significant movement)
-    final wasDragging = _draggedSmear != null || _draggedDoseRate != null || _draggedIcon != null || _draggedTitleCard || model.isResizing;
+    final wasDragging = _draggedSmear != null || _draggedDoseRate != null || _draggedIcon != null || _draggedComment != null || _draggedTitleCard || model.isResizing;
 
     bool isTap = false;
     double distance = 0;
@@ -515,6 +550,14 @@ class _MapCanvasState extends State<MapCanvas> {
       );
     }
 
+    if (_draggedComment != null && _commentDragStartPosition != null && _draggedComment!.position != _commentDragStartPosition) {
+      debugPrint('Comment dragged from $_commentDragStartPosition to ${_draggedComment!.position}');
+      // Add command to undo stack without executing (position already updated via Direct methods)
+      model.undoRedoManager.addCommandWithoutExecuting(
+        MoveCommentCommand(model, _draggedComment!, _commentDragStartPosition!, _draggedComment!.position)
+      );
+    }
+
     // Always handle tap if it's a tap gesture and not dragging
     if (!wasDragging && isTap) {
       // This was a tap, not a drag - handle tool actions
@@ -532,6 +575,9 @@ class _MapCanvasState extends State<MapCanvas> {
     _draggedIcon = null;
     _iconDragOffset = null;
     _iconDragStartPosition = null;
+    _draggedComment = null;
+    _commentDragOffset = null;
+    _commentDragStartPosition = null;
     _draggedTitleCard = false;
     _titleCardDragOffset = null;
     _titleCardDragStartPosition = null;
@@ -607,6 +653,22 @@ class _MapCanvasState extends State<MapCanvas> {
       return;
     }
 
+    // Handle comment addition
+    if (model.currentTool == ToolType.commentAdd) {
+      debugPrint('Comment add detected! Position: $pagePosition');
+      _showAddCommentDialog(model, pagePosition);
+      return;
+    }
+
+    // Handle comment removal
+    if (model.currentTool == ToolType.commentRemove) {
+      final comment = model.getCommentAtPosition(pagePosition, 40 / model.scale);
+      if (comment != null) {
+        model.removeComment(comment);
+      }
+      return;
+    }
+
     // Handle icon selection when no tool active
     if (model.currentTool == ToolType.none) {
       final equipment = model.getEquipmentAtPosition(pagePosition);
@@ -638,6 +700,13 @@ class _MapCanvasState extends State<MapCanvas> {
     if (_gestureStartPosition == null) return;
 
     final pagePosition = model.canvasToPage(_gestureStartPosition!);
+
+    // Check if double-clicked on a comment (scale-aware threshold)
+    final comment = model.getCommentAtPosition(pagePosition, 40 / model.scale);
+    if (comment != null) {
+      _showEditCommentDialog(model, comment);
+      return;
+    }
 
     // Check if double-clicked on a dose rate (scale-aware threshold)
     final doseRate = model.getDoseRateAtPosition(pagePosition, 50 / model.scale);
@@ -758,6 +827,86 @@ class _MapCanvasState extends State<MapCanvas> {
     );
   }
 
+  void _showAddCommentDialog(SurveyMapModel model, Offset pagePosition) {
+    final textController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Comment'),
+        content: TextField(
+          controller: textController,
+          decoration: const InputDecoration(
+            labelText: 'Comment Text',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = textController.text.trim();
+              if (text.isNotEmpty) {
+                model.addComment(pagePosition, text);
+                Navigator.pop(context);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter some text')),
+                );
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditCommentDialog(SurveyMapModel model, CommentAnnotation comment) {
+    final textController = TextEditingController(text: comment.text);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Edit Comment #${comment.id}'),
+        content: TextField(
+          controller: textController,
+          decoration: const InputDecoration(
+            labelText: 'Comment Text',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = textController.text.trim();
+              if (text.isNotEmpty) {
+                model.editComment(comment, text);
+                Navigator.pop(context);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please enter some text')),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _handleIconDrop(DragTargetDetails<IconMetadata> details, SurveyMapModel model) {
     final icon = details.data;
     final dropPosition = details.offset;
@@ -854,11 +1003,27 @@ class _MapCanvasState extends State<MapCanvas> {
     _draggedIcon = model.selectedIcon;
   }
 
+  void _dragComment(Offset focalPoint, SurveyMapModel model) {
+    if (_draggedComment == null || _commentDragOffset == null) return;
+
+    final pagePosition = model.canvasToPage(focalPoint);
+    final newPosition = pagePosition - _commentDragOffset!;
+
+    // Use Direct method to avoid creating undo/redo commands on every frame
+    model.updateCommentPositionDirect(_draggedComment!, newPosition);
+
+    // Update reference to the modified comment
+    final index = model.comments.indexWhere((c) => c.id == _draggedComment!.id);
+    if (index != -1) {
+      _draggedComment = model.comments[index];
+    }
+  }
+
   void _dragTitleCard(Offset focalPoint, SurveyMapModel model) {
     if (!_draggedTitleCard || _titleCardDragOffset == null) return;
 
     final pagePosition = model.canvasToPage(focalPoint);
-    final newPosition = pagePosition - _titleCardDragOffset!;
+    final newPosition = _titleCardDragOffset!;
 
     // Update position directly (no undo/redo needed for title card positioning)
     model.updateTitleCardPosition(newPosition);

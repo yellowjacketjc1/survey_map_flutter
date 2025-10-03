@@ -294,6 +294,47 @@ extension IconCategoryExtension on IconCategory {
   }
 }
 
+/// Represents a comment/note annotation
+class CommentAnnotation {
+  int id;
+  Offset position;
+  String text;
+
+  CommentAnnotation({
+    required this.id,
+    required this.position,
+    required this.text,
+  });
+
+  CommentAnnotation copyWith({int? id, Offset? position, String? text}) {
+    return CommentAnnotation(
+      id: id ?? this.id,
+      position: position ?? this.position,
+      text: text ?? this.text,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'x': position.dx,
+      'y': position.dy,
+      'text': text,
+    };
+  }
+
+  factory CommentAnnotation.fromJson(Map<String, dynamic> json) {
+    return CommentAnnotation(
+      id: json['id'] as int,
+      position: Offset(
+        (json['x'] as num).toDouble(),
+        (json['y'] as num).toDouble(),
+      ),
+      text: json['text'] as String,
+    );
+  }
+}
+
 /// Current tool state
 enum ToolType {
   none,
@@ -304,6 +345,8 @@ enum ToolType {
   boundary,
   boundaryDelete,
   equipmentDelete,
+  commentAdd,
+  commentRemove,
 }
 
 /// Resize handle positions
