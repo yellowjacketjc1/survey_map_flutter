@@ -43,6 +43,7 @@ class _MapCanvasState extends State<MapCanvas> {
   DoseRateAnnotation? _selectedDoseRate;
   CommentAnnotation? _selectedComment;
   BoundaryAnnotation? _selectedBoundary;
+  bool _selectedTitleCard = false;
 
   final FocusNode _focusNode = FocusNode();
 
@@ -69,6 +70,22 @@ class _MapCanvasState extends State<MapCanvas> {
 
   void _handleKeyEvent(KeyEvent event, SurveyMapModel model) {
     if (event is! KeyDownEvent) return;
+
+    // Handle ESC key - return to selection/drag mode
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      debugPrint('ESC key pressed - returning to selection mode');
+      model.setTool(ToolType.none);
+      // Clear all selections
+      model.selectIcon(null);
+      setState(() {
+        _selectedSmear = null;
+        _selectedDoseRate = null;
+        _selectedComment = null;
+        _selectedBoundary = null;
+        _selectedTitleCard = false;
+      });
+      return;
+    }
 
     // Handle Delete or Backspace key
     if (event.logicalKey == LogicalKeyboardKey.delete ||
@@ -333,6 +350,7 @@ class _MapCanvasState extends State<MapCanvas> {
                         selectedDoseRate: _selectedDoseRate,
                         selectedComment: _selectedComment,
                         selectedBoundary: _selectedBoundary,
+                        selectedTitleCard: _selectedTitleCard,
                       ),
                       size: Size.infinite,
                     ),
@@ -497,6 +515,7 @@ class _MapCanvasState extends State<MapCanvas> {
           _selectedDoseRate = null;
           _selectedComment = null;
           _selectedBoundary = null;
+          _selectedTitleCard = false;
         });
         return;
       }
@@ -552,8 +571,23 @@ class _MapCanvasState extends State<MapCanvas> {
           _selectedDoseRate = null;
           _selectedComment = null;
           _selectedBoundary = boundary;
+          _selectedTitleCard = false;
         });
         debugPrint('Boundary selected: ${boundary.id}');
+        return;
+      }
+
+      // Check for title card
+      if (model.isTitleCardAtPosition(pagePosition)) {
+        model.selectIcon(null); // Clear icon selection
+        setState(() {
+          _selectedSmear = null;
+          _selectedDoseRate = null;
+          _selectedComment = null;
+          _selectedBoundary = null;
+          _selectedTitleCard = true;
+        });
+        debugPrint('Title card selected');
         return;
       }
 
@@ -564,6 +598,7 @@ class _MapCanvasState extends State<MapCanvas> {
         _selectedDoseRate = null;
         _selectedComment = null;
         _selectedBoundary = null;
+        _selectedTitleCard = false;
       });
     }
   }
@@ -598,6 +633,14 @@ class _MapCanvasState extends State<MapCanvas> {
 
       // Check for title card drag
       if (model.isTitleCardAtPosition(pagePosition)) {
+        setState(() {
+          _selectedTitleCard = true;
+          _selectedSmear = null;
+          _selectedDoseRate = null;
+          _selectedComment = null;
+          _selectedBoundary = null;
+        });
+        model.selectIcon(null);
         _draggedTitleCard = true;
         _titleCardDragOffset = pagePosition - model.titleCard!.position;
         _titleCardDragStartPosition = model.titleCard!.position;
@@ -614,6 +657,7 @@ class _MapCanvasState extends State<MapCanvas> {
           _selectedDoseRate = null;
           _selectedComment = null;
           _selectedBoundary = null;
+          _selectedTitleCard = false;
         });
         _draggedIcon = equipment;
         _iconDragOffset = pagePosition - equipment.position;
@@ -913,6 +957,7 @@ class _MapCanvasState extends State<MapCanvas> {
           _selectedDoseRate = null;
           _selectedComment = null;
           _selectedBoundary = null;
+          _selectedTitleCard = false;
         });
         return;
       }
@@ -968,8 +1013,23 @@ class _MapCanvasState extends State<MapCanvas> {
           _selectedDoseRate = null;
           _selectedComment = null;
           _selectedBoundary = boundary;
+          _selectedTitleCard = false;
         });
         debugPrint('Boundary selected: ${boundary.id}');
+        return;
+      }
+
+      // Check for title card
+      if (model.isTitleCardAtPosition(pagePosition)) {
+        model.selectIcon(null); // Clear icon selection
+        setState(() {
+          _selectedSmear = null;
+          _selectedDoseRate = null;
+          _selectedComment = null;
+          _selectedBoundary = null;
+          _selectedTitleCard = true;
+        });
+        debugPrint('Title card selected');
         return;
       }
 
@@ -980,6 +1040,7 @@ class _MapCanvasState extends State<MapCanvas> {
         _selectedDoseRate = null;
         _selectedComment = null;
         _selectedBoundary = null;
+        _selectedTitleCard = false;
       });
     }
   }
@@ -1348,7 +1409,9 @@ class _MapCanvasState extends State<MapCanvas> {
     if (!_draggedTitleCard || _titleCardDragOffset == null) return;
 
     final pagePosition = model.canvasToPage(focalPoint);
-    final newPosition = _titleCardDragOffset!;
+    final newPosition = pagePosition - _titleCardDragOffset!;
+
+    debugPrint('Dragging title card to: $newPosition (page: $pagePosition, offset: $_titleCardDragOffset)');
 
     // Update position directly (no undo/redo needed for title card positioning)
     model.updateTitleCardPosition(newPosition);

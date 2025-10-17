@@ -211,10 +211,29 @@ class EditingPanel extends StatelessWidget {
   }
 
   Widget _buildSmearSection(BuildContext context, SurveyMapModel model) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    final isActive = model.currentTool == ToolType.smearAdd;
+
+    return InkWell(
+      onTap: () {
+        // Toggle between smearAdd and none
+        if (model.currentTool == ToolType.smearAdd) {
+          model.setTool(ToolType.none);
+        } else {
+          model.setTool(ToolType.smearAdd);
+        }
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.blue.withValues(alpha: 0.1) : Colors.transparent,
+          border: Border.all(
+            color: isActive ? Colors.blue : Colors.grey.shade300,
+            width: isActive ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
           children: [
             const Text(
               'Removable Smears',
@@ -227,72 +246,76 @@ class EditingPanel extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.grey.shade200,
+                color: isActive ? Colors.blue.withValues(alpha: 0.2) : Colors.grey.shade200,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                '${model.nextSmearId}',
-                style: const TextStyle(
+                '${model.smears.length}',
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black54,
+                  color: isActive ? Colors.blue.shade700 : Colors.black54,
                 ),
               ),
             ),
             const Spacer(),
-            IconButton(
-              icon: const Icon(Icons.add_circle, size: 20),
-              color: model.currentTool == ToolType.smearAdd
-                  ? Colors.blue
-                  : Colors.grey,
-              tooltip: 'Add Smear',
-              onPressed: () => model.setTool(ToolType.smearAdd),
-            ),
-            IconButton(
-              icon: const Icon(Icons.remove_circle, size: 20),
-              color: model.currentTool == ToolType.smearRemove
-                  ? Colors.blue
-                  : Colors.grey,
-              tooltip: 'Remove Smear',
-              onPressed: () => model.setTool(ToolType.smearRemove),
-            ),
+            if (isActive)
+              Icon(
+                Icons.check_circle,
+                color: Colors.blue,
+                size: 20,
+              ),
           ],
         ),
-      ],
+      ),
     );
   }
 
   Widget _buildDoseRateSection(BuildContext context, SurveyMapModel model) {
+    final isActive = model.currentTool == ToolType.doseAdd;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            const Text(
-              'Dose Rates',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+        InkWell(
+          onTap: () {
+            // Toggle between doseAdd and none
+            if (model.currentTool == ToolType.doseAdd) {
+              model.setTool(ToolType.none);
+            } else {
+              model.setTool(ToolType.doseAdd);
+            }
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: isActive ? Colors.blue.withValues(alpha: 0.1) : Colors.transparent,
+              border: Border.all(
+                color: isActive ? Colors.blue : Colors.grey.shade300,
+                width: isActive ? 2 : 1,
               ),
+              borderRadius: BorderRadius.circular(8),
             ),
-            const Spacer(),
-            IconButton(
-              icon: const Icon(Icons.add_circle, size: 20),
-              color: model.currentTool == ToolType.doseAdd
-                  ? Colors.blue
-                  : Colors.grey,
-              tooltip: 'Add Dose Rate',
-              onPressed: () => model.setTool(ToolType.doseAdd),
+            child: Row(
+              children: [
+                const Text(
+                  'Dose Rates',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                if (isActive)
+                  Icon(
+                    Icons.check_circle,
+                    color: Colors.blue,
+                    size: 20,
+                  ),
+              ],
             ),
-            IconButton(
-              icon: const Icon(Icons.remove_circle, size: 20),
-              color: model.currentTool == ToolType.doseRemove
-                  ? Colors.blue
-                  : Colors.grey,
-              tooltip: 'Remove Dose Rate',
-              onPressed: () => model.setTool(ToolType.doseRemove),
-            ),
-          ],
+          ),
         ),
         if (model.currentTool == ToolType.doseAdd) ...[
           const SizedBox(height: 8),
@@ -409,10 +432,29 @@ class EditingPanel extends StatelessWidget {
   }
 
   Widget _buildBoundarySection(BuildContext context, SurveyMapModel model) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    final isActive = model.currentTool == ToolType.boundary;
+
+    return InkWell(
+      onTap: () {
+        // Toggle between boundary and none
+        if (model.currentTool == ToolType.boundary) {
+          model.setTool(ToolType.none);
+        } else {
+          model.setTool(ToolType.boundary);
+        }
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.blue.withValues(alpha: 0.1) : Colors.transparent,
+          border: Border.all(
+            color: isActive ? Colors.blue : Colors.grey.shade300,
+            width: isActive ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
           children: [
             const Text(
               'Boundaries',
@@ -422,79 +464,79 @@ class EditingPanel extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            IconButton(
-              icon: const Icon(Icons.add_circle, size: 20),
-              color: model.currentTool == ToolType.boundary
-                  ? Colors.blue
-                  : Colors.grey,
-              tooltip: 'Draw Boundary',
-              onPressed: () => model.setTool(ToolType.boundary),
-            ),
-            IconButton(
-              icon: const Icon(Icons.remove_circle, size: 20),
-              color: model.currentTool == ToolType.boundaryDelete
-                  ? Colors.blue
-                  : Colors.grey,
-              tooltip: 'Delete Boundary',
-              onPressed: () => model.setTool(ToolType.boundaryDelete),
-            ),
+            if (isActive)
+              Icon(
+                Icons.check_circle,
+                color: Colors.blue,
+                size: 20,
+              ),
           ],
         ),
-      ],
+      ),
     );
   }
 
   Widget _buildCommentSection(BuildContext context, SurveyMapModel model) {
+    final isActive = model.currentTool == ToolType.commentAdd;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            const Text(
-              'Comments/Notes',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+        InkWell(
+          onTap: () {
+            // Toggle between commentAdd and none
+            if (model.currentTool == ToolType.commentAdd) {
+              model.setTool(ToolType.none);
+            } else {
+              model.setTool(ToolType.commentAdd);
+            }
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: isActive ? Colors.blue.withValues(alpha: 0.1) : Colors.transparent,
+              border: Border.all(
+                color: isActive ? Colors.blue : Colors.grey.shade300,
+                width: isActive ? 2 : 1,
               ),
+              borderRadius: BorderRadius.circular(8),
             ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '${model.comments.length}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black54,
+            child: Row(
+              children: [
+                const Text(
+                  'Comments/Notes',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isActive ? Colors.blue.withValues(alpha: 0.2) : Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${model.comments.length}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: isActive ? Colors.blue.shade700 : Colors.black54,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                if (isActive)
+                  Icon(
+                    Icons.check_circle,
+                    color: Colors.blue,
+                    size: 20,
+                  ),
+              ],
             ),
-            const Spacer(),
-            IconButton(
-              icon: const Icon(Icons.add_circle, size: 20),
-              color: model.currentTool == ToolType.commentAdd
-                  ? Colors.blue
-                  : Colors.grey,
-              tooltip: 'Add Comment',
-              onPressed: () {
-                debugPrint('Comment Add button pressed');
-                model.setTool(ToolType.commentAdd);
-                debugPrint('Current tool after setTool: ${model.currentTool}');
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.remove_circle, size: 20),
-              color: model.currentTool == ToolType.commentRemove
-                  ? Colors.blue
-                  : Colors.grey,
-              tooltip: 'Remove Comment',
-              onPressed: () => model.setTool(ToolType.commentRemove),
-            ),
-          ],
+          ),
         ),
         if (model.comments.isNotEmpty) ...[
           const SizedBox(height: 8),

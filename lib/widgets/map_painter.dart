@@ -10,6 +10,7 @@ class MapPainter extends CustomPainter {
   final DoseRateAnnotation? selectedDoseRate;
   final CommentAnnotation? selectedComment;
   final BoundaryAnnotation? selectedBoundary;
+  final bool selectedTitleCard;
 
   MapPainter({
     required this.model,
@@ -18,6 +19,7 @@ class MapPainter extends CustomPainter {
     this.selectedDoseRate,
     this.selectedComment,
     this.selectedBoundary,
+    this.selectedTitleCard = false,
   });
 
   @override
@@ -456,15 +458,32 @@ class MapPainter extends CustomPainter {
       cardHeight,
     );
 
+    // Draw selection highlight if selected
+    if (selectedTitleCard) {
+      // Draw outer glow
+      final glowRect = cardRect.inflate(4);
+      final glowPaint = Paint()
+        ..color = Colors.blue.withValues(alpha: 0.3)
+        ..style = PaintingStyle.fill;
+      canvas.drawRect(glowRect, glowPaint);
+
+      // Draw selection border
+      final selectionPaint = Paint()
+        ..color = Colors.blue
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4;
+      canvas.drawRect(cardRect.inflate(2), selectionPaint);
+    }
+
     // Draw card background with border
     final bgPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill;
 
     final borderPaint = Paint()
-      ..color = Colors.black
+      ..color = selectedTitleCard ? Colors.blue : Colors.black
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+      ..strokeWidth = selectedTitleCard ? 3 : 2;
 
     canvas.drawRect(cardRect, bgPaint);
     canvas.drawRect(cardRect, borderPaint);
