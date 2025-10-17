@@ -290,6 +290,33 @@ class ResizeEquipmentCommand extends Command {
   String get description => 'Resize Equipment';
 }
 
+class RotateEquipmentCommand extends Command {
+  final SurveyMapModel model;
+  final EquipmentAnnotation equipment;
+  final double oldRotation;
+  final double newRotation;
+
+  RotateEquipmentCommand(
+    this.model,
+    this.equipment,
+    this.oldRotation,
+    this.newRotation,
+  );
+
+  @override
+  void execute() {
+    model.updateEquipmentRotationDirect(equipment, newRotation);
+  }
+
+  @override
+  void undo() {
+    model.updateEquipmentRotationDirect(equipment, oldRotation);
+  }
+
+  @override
+  String get description => 'Rotate Equipment';
+}
+
 // Comment Commands
 class AddCommentCommand extends Command {
   final SurveyMapModel model;

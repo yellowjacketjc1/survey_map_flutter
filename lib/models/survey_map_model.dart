@@ -488,6 +488,15 @@ class SurveyMapModel extends ChangeNotifier {
     }
   }
 
+  void updateEquipmentRotation(EquipmentAnnotation equipment, double rotation) {
+    final oldRotation = equipment.rotation;
+    if (oldRotation != rotation) {
+      undoRedoManager.executeCommand(
+        RotateEquipmentCommand(this, equipment, oldRotation, rotation),
+      );
+    }
+  }
+
   // Direct methods (used by commands, no undo/redo)
   void addEquipmentDirect(EquipmentAnnotation equipment) {
     _equipment.add(equipment);
@@ -525,6 +534,17 @@ class SurveyMapModel extends ChangeNotifier {
     final index = _equipment.indexWhere((e) => e.id == equipment.id);
     if (index != -1) {
       _equipment[index] = equipment.copyWith(width: width, height: height);
+      if (_selectedIcon?.id == equipment.id) {
+        _selectedIcon = _equipment[index];
+      }
+      notifyListeners();
+    }
+  }
+
+  void updateEquipmentRotationDirect(EquipmentAnnotation equipment, double rotation) {
+    final index = _equipment.indexWhere((e) => e.id == equipment.id);
+    if (index != -1) {
+      _equipment[index] = equipment.copyWith(rotation: rotation);
       if (_selectedIcon?.id == equipment.id) {
         _selectedIcon = _equipment[index];
       }

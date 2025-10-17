@@ -87,6 +87,17 @@ class _MapCanvasState extends State<MapCanvas> {
       return;
     }
 
+    // Handle R key - rotate selected icon
+    if (event.logicalKey == LogicalKeyboardKey.keyR) {
+      if (model.selectedIcon != null) {
+        debugPrint('R key pressed - rotating icon');
+        final currentRotation = model.selectedIcon!.rotation;
+        final newRotation = (currentRotation + 45) % 360;
+        model.updateEquipmentRotation(model.selectedIcon!, newRotation);
+      }
+      return;
+    }
+
     // Handle Delete or Backspace key
     if (event.logicalKey == LogicalKeyboardKey.delete ||
         event.logicalKey == LogicalKeyboardKey.backspace) {
@@ -748,21 +759,25 @@ class _MapCanvasState extends State<MapCanvas> {
       return;
     }
 
-    // Handle pinch-to-zoom
-    if (details.scale != 1.0 && details.pointerCount >= 2) {
+    // Handle pinch-to-zoom (works on trackpads and touch screens)
+    // Note: On web/trackpad, pointerCount might be 1 even during pinch
+    if (details.scale != 1.0 && details.scale != _lastScale) {
       // Calculate zoom change from last scale value
       final scaleDelta = details.scale - _lastScale;
 
-      // Convert to zoom delta (similar to mouse wheel)
-      // Multiply by a factor to make pinch zoom more responsive
-      final zoomDelta = scaleDelta * 10.0;
+      // Only process if there's a significant scale change
+      if (scaleDelta.abs() > 0.001) {
+        // Convert to zoom delta (similar to mouse wheel)
+        // Multiply by a factor to make pinch zoom more responsive
+        final zoomDelta = scaleDelta * 10.0;
 
-      final size = MediaQuery.of(context).size;
-      model.zoom(zoomDelta, details.focalPoint, size);
+        final size = MediaQuery.of(context).size;
+        model.zoom(zoomDelta, details.focalPoint, size);
 
-      _lastScale = details.scale;
-      _lastPanPosition = details.focalPoint;
-      return;
+        _lastScale = details.scale;
+        _lastPanPosition = details.focalPoint;
+        return;
+      }
     }
 
     // Handle pan - only when no tool is active or when using pan-compatible tools
