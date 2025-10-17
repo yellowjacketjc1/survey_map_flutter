@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:vector_graphics/vector_graphics.dart' as vg_lib;
@@ -37,6 +38,14 @@ class _MapCanvasState extends State<MapCanvas> {
   final Map<String, ui.Image> _iconCache = {};
   double _lastScale = 1.0;
 
+  // Track selected annotations for keyboard deletion
+  SmearAnnotation? _selectedSmear;
+  DoseRateAnnotation? _selectedDoseRate;
+  CommentAnnotation? _selectedComment;
+  BoundaryAnnotation? _selectedBoundary;
+
+  final FocusNode _focusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
@@ -46,33 +55,118 @@ class _MapCanvasState extends State<MapCanvas> {
     });
   }
 
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
   void _resetView() {
     final model = context.read<SurveyMapModel>();
     final size = MediaQuery.of(context).size;
     model.resetView(Size(size.width * 0.7, size.height));
   }
 
+  void _handleKeyEvent(KeyEvent event, SurveyMapModel model) {
+    if (event is! KeyDownEvent) return;
+
+    // Handle Delete or Backspace key
+    if (event.logicalKey == LogicalKeyboardKey.delete ||
+        event.logicalKey == LogicalKeyboardKey.backspace) {
+      debugPrint('Delete key pressed');
+
+      // Check for selected equipment/icon (highest priority since it has visual selection)
+      if (model.selectedIcon != null) {
+        debugPrint('Deleting selected equipment: ${model.selectedIcon!.iconFile}');
+        model.removeEquipment(model.selectedIcon!);
+        return;
+      }
+
+      // Check for selected smear
+      if (_selectedSmear != null) {
+        debugPrint('Deleting selected smear: ${_selectedSmear!.id}');
+        model.removeSmear(_selectedSmear!);
+        setState(() {
+          _selectedSmear = null;
+        });
+        return;
+      }
+
+      // Check for selected dose rate
+      if (_selectedDoseRate != null) {
+        debugPrint('Deleting selected dose rate');
+        model.removeDoseRate(_selectedDoseRate!);
+        setState(() {
+          _selectedDoseRate = null;
+        });
+        return;
+      }
+
+      // Check for selected comment
+      if (_selectedComment != null) {
+        debugPrint('Deleting selected comment: ${_selectedComment!.id}');
+        model.removeComment(_selectedComment!);
+        setState(() {
+          _selectedComment = null;
+        });
+        return;
+      }
+
+      // Check for selected boundary
+      if (_selectedBoundary != null) {
+        debugPrint('Deleting selected boundary: ${_selectedBoundary!.id}');
+        model.deleteBoundary(_selectedBoundary!);
+        setState(() {
+          _selectedBoundary = null;
+        });
+        return;
+      }
+
+      debugPrint('No item selected for deletion');
+    }
+  }
+
   Future<void> _preloadIcons() async {
     final model = context.read<SurveyMapModel>();
+    debugPrint('Starting icon preload. Icon library size: ${model.iconLibrary.length}');
+
+    int materialIconsLoaded = 0;
+    int svgIconsLoaded = 0;
+    int postingsLoaded = 0;
+
     for (final icon in model.iconLibrary) {
       // Skip Material Icons - they're rendered differently
       if (icon.metadata is Map && icon.metadata['type'] == 'material') {
         final iconData = icon.metadata['iconData'] as IconData;
         await _loadMaterialIconToImage(iconData, icon.file);
+        materialIconsLoaded++;
         continue;
       }
 
       if (icon.svgText != null) {
         await _loadSvgToImage(icon.svgText!, icon.file, isAsset: false);
+        svgIconsLoaded++;
       } else if (icon.assetPath != null) {
         await _loadSvgToImage(icon.assetPath!, icon.file, isAsset: true);
+        if (icon.category == IconCategory.posting) {
+          postingsLoaded++;
+        }
+        svgIconsLoaded++;
       }
     }
+
+    debugPrint('Icon library preload complete: $materialIconsLoaded material, $svgIconsLoaded SVG (including $postingsLoaded postings)');
+
     // Also load equipment icons
+    debugPrint('Loading equipment icons. Equipment count: ${model.equipment.length}');
     for (final equipment in model.equipment) {
       // Skip if already cached
-      if (_iconCache.containsKey(equipment.iconFile)) continue;
+      if (_iconCache.containsKey(equipment.iconFile)) {
+        debugPrint('Equipment icon already cached: ${equipment.iconFile}');
+        continue;
+      }
 
+      debugPrint('Loading equipment icon: ${equipment.iconFile}');
       // Check if it's a Material Icon
       if (equipment.iconSvg.startsWith('material:')) {
         // Extract the icon key and load from icon library
@@ -86,9 +180,12 @@ class _MapCanvasState extends State<MapCanvas> {
         // Determine if it's an asset path or inline SVG
         final isAsset = equipment.iconSvg.startsWith('assets/') ||
                         equipment.iconSvg.contains('.svg');
+        debugPrint('Equipment icon type: ${isAsset ? "asset" : "inline SVG"}');
         await _loadSvgToImage(equipment.iconSvg, equipment.iconFile, isAsset: isAsset);
       }
     }
+
+    debugPrint('Icon preload finished. Total cached icons: ${_iconCache.length}');
   }
 
   Future<void> _loadMaterialIconToImage(IconData iconData, String key) async {
@@ -139,14 +236,26 @@ class _MapCanvasState extends State<MapCanvas> {
     if (_iconCache.containsKey(key)) return;
 
     try {
-      debugPrint('Loading SVG: $key (isAsset: $isAsset)');
+      debugPrint('Loading SVG: $key (isAsset: $isAsset, content length: ${svgContent.length})');
+
+      // For asset loading, log the full path
+      if (isAsset) {
+        debugPrint('Asset path: $svgContent');
+      }
 
       final pictureInfo = await vg_lib.vg.loadPicture(
         isAsset ? SvgAssetLoader(svgContent) : SvgStringLoader(svgContent),
         null,
       );
 
-      debugPrint('SVG loaded, size: ${pictureInfo.size}');
+      debugPrint('SVG loaded successfully, size: ${pictureInfo.size}');
+
+      // Check for zero or invalid dimensions
+      if (pictureInfo.size.width <= 0 || pictureInfo.size.height <= 0) {
+        debugPrint('Warning: SVG $key has invalid dimensions: ${pictureInfo.size}');
+        pictureInfo.picture.dispose();
+        return;
+      }
 
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
@@ -161,13 +270,14 @@ class _MapCanvasState extends State<MapCanvas> {
         setState(() {
           _iconCache[key] = image;
         });
-        debugPrint('SVG cached: $key');
+        debugPrint('SVG cached successfully: $key (${_iconCache.length} total cached)');
       }
 
       pictureInfo.picture.dispose();
     } catch (e, stackTrace) {
-      debugPrint('Error loading SVG $key: $e');
-      debugPrint('Stack trace: $stackTrace');
+      debugPrint('❌ ERROR loading SVG $key: $e');
+      debugPrint('   Asset: $isAsset, Path/Content: ${svgContent.substring(0, svgContent.length.clamp(0, 100))}');
+      debugPrint('   Stack trace: $stackTrace');
     }
   }
 
@@ -181,40 +291,56 @@ class _MapCanvasState extends State<MapCanvas> {
           );
         }
 
-        return DragTarget<IconMetadata>(
-          onAcceptWithDetails: (details) => _handleIconDrop(details, model),
-          builder: (context, candidateData, rejectedData) {
-            return Listener(
-              onPointerSignal: (event) {
-                if (event is PointerScrollEvent) {
-                  _handleScrollZoom(event, model);
-                }
-              },
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: (details) => _handleTapDown(details, model),
-                onTapUp: (details) => _handleTapUp(details, model),
-                onScaleStart: _handleScaleStart,
-                onScaleUpdate: (details) => _handleScaleUpdate(details, model),
-                onScaleEnd: _handleScaleEnd,
-                onSecondaryTapDown: (details) {
-                  // Prevent default context menu and handle right-click
-                  _handleRightClick(details, model);
+        return Focus(
+          focusNode: _focusNode,
+          autofocus: true,
+          onKeyEvent: (node, event) {
+            _handleKeyEvent(event, model);
+            return KeyEventResult.handled;
+          },
+          child: DragTarget<IconMetadata>(
+            onAcceptWithDetails: (details) => _handleIconDrop(details, model),
+            builder: (context, candidateData, rejectedData) {
+              return Listener(
+                onPointerSignal: (event) {
+                  if (event is PointerScrollEvent) {
+                    _handleScrollZoom(event, model);
+                  }
                 },
-                onDoubleTap: () => _handleDoubleTapForEdit(model),
-                child: MouseRegion(
-                  cursor: _getCursor(model),
-                  child: CustomPaint(
-                    painter: MapPainter(
-                      model: model,
-                      iconCache: _iconCache,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (details) {
+                    _handleTapDown(details, model);
+                    // Request focus when user clicks on the map
+                    _focusNode.requestFocus();
+                  },
+                  onTapUp: (details) => _handleTapUp(details, model),
+                  onScaleStart: _handleScaleStart,
+                  onScaleUpdate: (details) => _handleScaleUpdate(details, model),
+                  onScaleEnd: _handleScaleEnd,
+                  onSecondaryTapDown: (details) {
+                    // Prevent default context menu and handle right-click
+                    _handleRightClick(details, model);
+                  },
+                  onDoubleTap: () => _handleDoubleTapForEdit(model),
+                  child: MouseRegion(
+                    cursor: _getCursor(model),
+                    child: CustomPaint(
+                      painter: MapPainter(
+                        model: model,
+                        iconCache: _iconCache,
+                        selectedSmear: _selectedSmear,
+                        selectedDoseRate: _selectedDoseRate,
+                        selectedComment: _selectedComment,
+                        selectedBoundary: _selectedBoundary,
+                      ),
+                      size: Size.infinite,
                     ),
-                    size: Size.infinite,
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );
@@ -303,6 +429,12 @@ class _MapCanvasState extends State<MapCanvas> {
     if (model.currentTool == ToolType.boundaryDelete) {
       final boundary = model.getBoundaryAtPosition(pagePosition, 15);
       if (boundary != null) {
+        setState(() {
+          _selectedBoundary = boundary;
+          _selectedSmear = null;
+          _selectedDoseRate = null;
+          _selectedComment = null;
+        });
         model.deleteBoundary(boundary);
       }
       return;
@@ -354,14 +486,85 @@ class _MapCanvasState extends State<MapCanvas> {
       return;
     }
 
-    // Handle icon selection when no tool active
+    // Handle selection when no tool active (for keyboard deletion)
     if (model.currentTool == ToolType.none) {
+      // Check for equipment/icon first
       final equipment = model.getEquipmentAtPosition(pagePosition);
       if (equipment != null) {
         model.selectIcon(equipment);
-      } else {
-        model.selectIcon(null);
+        setState(() {
+          _selectedSmear = null;
+          _selectedDoseRate = null;
+          _selectedComment = null;
+          _selectedBoundary = null;
+        });
+        return;
       }
+
+      // Check for smear
+      final smear = model.getSmearAtPosition(pagePosition, 40 / model.scale);
+      if (smear != null) {
+        model.selectIcon(null); // Clear icon selection
+        setState(() {
+          _selectedSmear = smear;
+          _selectedDoseRate = null;
+          _selectedComment = null;
+          _selectedBoundary = null;
+        });
+        debugPrint('Smear selected: ${smear.id}');
+        return;
+      }
+
+      // Check for dose rate
+      final doseRate = model.getDoseRateAtPosition(pagePosition, 50 / model.scale);
+      if (doseRate != null) {
+        model.selectIcon(null); // Clear icon selection
+        setState(() {
+          _selectedSmear = null;
+          _selectedDoseRate = doseRate;
+          _selectedComment = null;
+          _selectedBoundary = null;
+        });
+        debugPrint('Dose rate selected');
+        return;
+      }
+
+      // Check for comment
+      final comment = model.getCommentAtPosition(pagePosition, 40 / model.scale);
+      if (comment != null) {
+        model.selectIcon(null); // Clear icon selection
+        setState(() {
+          _selectedSmear = null;
+          _selectedDoseRate = null;
+          _selectedComment = comment;
+          _selectedBoundary = null;
+        });
+        debugPrint('Comment selected: ${comment.id}');
+        return;
+      }
+
+      // Check for boundary
+      final boundary = model.getBoundaryAtPosition(pagePosition, 15);
+      if (boundary != null) {
+        model.selectIcon(null); // Clear icon selection
+        setState(() {
+          _selectedSmear = null;
+          _selectedDoseRate = null;
+          _selectedComment = null;
+          _selectedBoundary = boundary;
+        });
+        debugPrint('Boundary selected: ${boundary.id}');
+        return;
+      }
+
+      // Nothing selected - clear all selections
+      model.selectIcon(null);
+      setState(() {
+        _selectedSmear = null;
+        _selectedDoseRate = null;
+        _selectedComment = null;
+        _selectedBoundary = null;
+      });
     }
   }
 
@@ -406,6 +609,12 @@ class _MapCanvasState extends State<MapCanvas> {
       final equipment = model.getEquipmentAtPosition(pagePosition);
       if (equipment != null) {
         model.selectIcon(equipment);
+        setState(() {
+          _selectedSmear = null;
+          _selectedDoseRate = null;
+          _selectedComment = null;
+          _selectedBoundary = null;
+        });
         _draggedIcon = equipment;
         _iconDragOffset = pagePosition - equipment.position;
         _iconDragStartPosition = equipment.position;
@@ -415,6 +624,12 @@ class _MapCanvasState extends State<MapCanvas> {
       // Check for smear drag (increased threshold for easier grabbing)
       final smear = model.getSmearAtPosition(pagePosition, 40 / model.scale);
       if (smear != null) {
+        setState(() {
+          _selectedSmear = smear;
+          _selectedDoseRate = null;
+          _selectedComment = null;
+          _selectedBoundary = null;
+        });
         _draggedSmear = smear;
         _smearDragOffset = pagePosition - smear.position;
         _smearDragStartPosition = smear.position;
@@ -425,6 +640,12 @@ class _MapCanvasState extends State<MapCanvas> {
       // Check for dose rate drag (increased threshold for easier grabbing)
       final doseRate = model.getDoseRateAtPosition(pagePosition, 50 / model.scale);
       if (doseRate != null) {
+        setState(() {
+          _selectedSmear = null;
+          _selectedDoseRate = doseRate;
+          _selectedComment = null;
+          _selectedBoundary = null;
+        });
         _draggedDoseRate = doseRate;
         _doseRateDragOffset = pagePosition - doseRate.position;
         _doseRateDragStartPosition = doseRate.position;
@@ -435,6 +656,12 @@ class _MapCanvasState extends State<MapCanvas> {
       // Check for comment drag (increased threshold for easier grabbing)
       final comment = model.getCommentAtPosition(pagePosition, 40 / model.scale);
       if (comment != null) {
+        setState(() {
+          _selectedSmear = null;
+          _selectedDoseRate = null;
+          _selectedComment = comment;
+          _selectedBoundary = null;
+        });
         _draggedComment = comment;
         _commentDragOffset = pagePosition - comment.position;
         _commentDragStartPosition = comment.position;
@@ -605,6 +832,12 @@ class _MapCanvasState extends State<MapCanvas> {
     if (model.currentTool == ToolType.boundaryDelete) {
       final boundary = model.getBoundaryAtPosition(pagePosition, 15);
       if (boundary != null) {
+        setState(() {
+          _selectedBoundary = boundary;
+          _selectedSmear = null;
+          _selectedDoseRate = null;
+          _selectedComment = null;
+        });
         model.deleteBoundary(boundary);
       }
       return;
@@ -669,14 +902,85 @@ class _MapCanvasState extends State<MapCanvas> {
       return;
     }
 
-    // Handle icon selection when no tool active
+    // Handle selection when no tool active (for keyboard deletion)
     if (model.currentTool == ToolType.none) {
+      // Check for equipment/icon first
       final equipment = model.getEquipmentAtPosition(pagePosition);
       if (equipment != null) {
         model.selectIcon(equipment);
-      } else {
-        model.selectIcon(null);
+        setState(() {
+          _selectedSmear = null;
+          _selectedDoseRate = null;
+          _selectedComment = null;
+          _selectedBoundary = null;
+        });
+        return;
       }
+
+      // Check for smear
+      final smear = model.getSmearAtPosition(pagePosition, 40 / model.scale);
+      if (smear != null) {
+        model.selectIcon(null); // Clear icon selection
+        setState(() {
+          _selectedSmear = smear;
+          _selectedDoseRate = null;
+          _selectedComment = null;
+          _selectedBoundary = null;
+        });
+        debugPrint('Smear selected: ${smear.id}');
+        return;
+      }
+
+      // Check for dose rate
+      final doseRate = model.getDoseRateAtPosition(pagePosition, 50 / model.scale);
+      if (doseRate != null) {
+        model.selectIcon(null); // Clear icon selection
+        setState(() {
+          _selectedSmear = null;
+          _selectedDoseRate = doseRate;
+          _selectedComment = null;
+          _selectedBoundary = null;
+        });
+        debugPrint('Dose rate selected');
+        return;
+      }
+
+      // Check for comment
+      final comment = model.getCommentAtPosition(pagePosition, 40 / model.scale);
+      if (comment != null) {
+        model.selectIcon(null); // Clear icon selection
+        setState(() {
+          _selectedSmear = null;
+          _selectedDoseRate = null;
+          _selectedComment = comment;
+          _selectedBoundary = null;
+        });
+        debugPrint('Comment selected: ${comment.id}');
+        return;
+      }
+
+      // Check for boundary
+      final boundary = model.getBoundaryAtPosition(pagePosition, 15);
+      if (boundary != null) {
+        model.selectIcon(null); // Clear icon selection
+        setState(() {
+          _selectedSmear = null;
+          _selectedDoseRate = null;
+          _selectedComment = null;
+          _selectedBoundary = boundary;
+        });
+        debugPrint('Boundary selected: ${boundary.id}');
+        return;
+      }
+
+      // Nothing selected - clear all selections
+      model.selectIcon(null);
+      setState(() {
+        _selectedSmear = null;
+        _selectedDoseRate = null;
+        _selectedComment = null;
+        _selectedBoundary = null;
+      });
     }
   }
 
@@ -911,6 +1215,9 @@ class _MapCanvasState extends State<MapCanvas> {
     final icon = details.data;
     final dropPosition = details.offset;
 
+    debugPrint('Icon drop detected: ${icon.name} (${icon.file}) at $dropPosition');
+    debugPrint('Icon category: ${icon.category}, hasAssetPath: ${icon.assetPath != null}, hasSvgText: ${icon.svgText != null}');
+
     // Convert screen position to page position
     final pagePosition = model.canvasToPage(dropPosition);
 
@@ -919,11 +1226,15 @@ class _MapCanvasState extends State<MapCanvas> {
     bool isAsset = false;
     if (icon.metadata is Map && icon.metadata['type'] == 'material') {
       iconContent = 'material:${icon.file}';
+      debugPrint('Material icon detected');
     } else {
       iconContent = icon.svgText ?? '';
       if (iconContent.isEmpty && icon.assetPath != null) {
         iconContent = icon.assetPath!;
         isAsset = true;
+        debugPrint('Asset path icon detected: $iconContent');
+      } else if (iconContent.isNotEmpty) {
+        debugPrint('Inline SVG detected, length: ${iconContent.length}');
       }
     }
 
@@ -936,18 +1247,20 @@ class _MapCanvasState extends State<MapCanvas> {
       height: 80,
     );
 
+    debugPrint('Adding equipment: file=${equipment.iconFile}, page pos=$pagePosition');
     model.addEquipment(equipment);
 
     // Load the icon for this equipment
     if (icon.metadata is Map && icon.metadata['type'] == 'material') {
       final iconData = icon.metadata['iconData'] as IconData;
+      debugPrint('Loading material icon to cache...');
       _loadMaterialIconToImage(iconData, icon.file);
     } else {
+      debugPrint('Loading SVG to cache (isAsset: $isAsset)...');
       _loadSvgToImage(iconContent, icon.file, isAsset: isAsset);
     }
 
-    debugPrint('Equipment added: file=${equipment.iconFile}, page pos=$pagePosition, width=${equipment.width}, height=${equipment.height}');
-    debugPrint('Total equipment now: ${model.equipment.length}');
+    debugPrint('Equipment added successfully. Total equipment: ${model.equipment.length}');
   }
 
   void _dragSmear(Offset focalPoint, SurveyMapModel model) {
@@ -975,15 +1288,27 @@ class _MapCanvasState extends State<MapCanvas> {
     // Use Direct method to avoid creating undo/redo commands on every frame
     model.updateDoseRatePositionDirect(_draggedDoseRate!, newPosition);
 
-    // Update reference to the modified dose rate
-    // Since DoseRateAnnotation doesn't have an id, we find by value and unit
+    // Update reference to the modified dose rate by finding the exact same object
+    // Use identical() to check object identity, not property equality
     final index = model.doseRates.indexWhere(
-      (d) => d.value == _draggedDoseRate!.value &&
-             d.unit == _draggedDoseRate!.unit &&
-             d.type == _draggedDoseRate!.type
+      (d) => identical(d, _draggedDoseRate)
     );
     if (index != -1) {
       _draggedDoseRate = model.doseRates[index];
+    } else {
+      // If we can't find by identity, try to find by the start position
+      // This handles the case where the object was replaced
+      if (_doseRateDragStartPosition != null) {
+        final matchingIndex = model.doseRates.indexWhere(
+          (d) => d.value == _draggedDoseRate!.value &&
+                 d.unit == _draggedDoseRate!.unit &&
+                 d.type == _draggedDoseRate!.type &&
+                 (d.position - newPosition).distance < 1.0 // Must be at the current drag position
+        );
+        if (matchingIndex != -1) {
+          _draggedDoseRate = model.doseRates[matchingIndex];
+        }
+      }
     }
   }
 

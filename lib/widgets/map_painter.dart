@@ -6,10 +6,18 @@ import '../models/survey_map_model.dart';
 class MapPainter extends CustomPainter {
   final SurveyMapModel model;
   final Map<String, ui.Image> iconCache;
+  final SmearAnnotation? selectedSmear;
+  final DoseRateAnnotation? selectedDoseRate;
+  final CommentAnnotation? selectedComment;
+  final BoundaryAnnotation? selectedBoundary;
 
   MapPainter({
     required this.model,
     required this.iconCache,
+    this.selectedSmear,
+    this.selectedDoseRate,
+    this.selectedComment,
+    this.selectedBoundary,
   });
 
   @override
@@ -85,6 +93,8 @@ class MapPainter extends CustomPainter {
   }
 
   void _drawSmear(Canvas canvas, SmearAnnotation smear) {
+    final isSelected = selectedSmear?.id == smear.id;
+
     final paint = Paint()
       ..color = const Color(0x99FFC107)
       ..style = PaintingStyle.fill;
@@ -96,6 +106,22 @@ class MapPainter extends CustomPainter {
 
     canvas.drawCircle(smear.position, 15, paint);
     canvas.drawCircle(smear.position, 15, strokePaint);
+
+    // Draw selection indicator
+    if (isSelected) {
+      final selectionPaint = Paint()
+        ..color = Colors.blue
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3;
+      canvas.drawCircle(smear.position, 22, selectionPaint);
+
+      // Draw outer glow
+      final glowPaint = Paint()
+        ..color = Colors.blue.withValues(alpha: 0.3)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6;
+      canvas.drawCircle(smear.position, 24, glowPaint);
+    }
 
     // Draw ID
     final textPainter = TextPainter(
@@ -121,6 +147,9 @@ class MapPainter extends CustomPainter {
   }
 
   void _drawDoseRate(Canvas canvas, DoseRateAnnotation dose) {
+    // Use object identity to check if this is the selected dose rate
+    final isSelected = selectedDoseRate != null && identical(selectedDoseRate, dose);
+
     final displayValue = '${dose.value} ${dose.unit}';
 
     final textPainter = TextPainter(
@@ -136,6 +165,38 @@ class MapPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
     );
     textPainter.layout();
+
+    // Draw selection indicator background
+    if (isSelected) {
+      final padding = 6.0;
+      final bgRect = RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: dose.position,
+          width: textPainter.width + padding * 2,
+          height: textPainter.height + padding * 2,
+        ),
+        const Radius.circular(4),
+      );
+
+      // Draw outer glow
+      final glowPaint = Paint()
+        ..color = Colors.blue.withValues(alpha: 0.3)
+        ..style = PaintingStyle.fill;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          bgRect.outerRect.inflate(3),
+          const Radius.circular(6),
+        ),
+        glowPaint,
+      );
+
+      // Draw selection border
+      final selectionPaint = Paint()
+        ..color = Colors.blue
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2;
+      canvas.drawRRect(bgRect, selectionPaint);
+    }
 
     // Draw neutron indicator if needed
     if (dose.type == DoseType.neutron) {
@@ -194,24 +255,43 @@ class MapPainter extends CustomPainter {
         _drawSelectionHandles(canvas, equipment);
       }
     } else {
-      // Draw placeholder
+      // Draw placeholder with warning
+      debugPrint('⚠️  Drawing placeholder for equipment: ${equipment.iconFile} (not in cache)');
       final rect = Rect.fromCenter(
         center: equipment.position,
         width: equipment.width,
         height: equipment.height,
       );
+
+      // Draw red placeholder to make it obvious something is missing
       canvas.drawRect(
         rect,
         Paint()
-          ..color = Colors.grey.withValues(alpha: 0.5)
+          ..color = Colors.red.withValues(alpha: 0.3)
           ..style = PaintingStyle.fill,
       );
       canvas.drawRect(
         rect,
         Paint()
-          ..color = Colors.grey
+          ..color = Colors.red
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1,
+          ..strokeWidth = 2,
+      );
+
+      // Draw an X to indicate missing icon
+      final paint = Paint()
+        ..color = Colors.red
+        ..strokeWidth = 2
+        ..style = PaintingStyle.stroke;
+      canvas.drawLine(
+        Offset(rect.left, rect.top),
+        Offset(rect.right, rect.bottom),
+        paint,
+      );
+      canvas.drawLine(
+        Offset(rect.right, rect.top),
+        Offset(rect.left, rect.bottom),
+        paint,
       );
     }
   }
@@ -263,10 +343,42 @@ class MapPainter extends CustomPainter {
   void _drawBoundary(Canvas canvas, BoundaryAnnotation boundary) {
     if (boundary.points.length < 2) return;
 
+    final isSelected = selectedBoundary?.id == boundary.id;
+
+    // Draw selection highlight first (if selected)
+    if (isSelected) {
+      // Draw a thicker, brighter line behind the boundary
+      final selectionPaint = Paint()
+        ..color = Colors.blue.withValues(alpha: 0.5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8;
+
+      final selectionPath = Path();
+      selectionPath.moveTo(boundary.points[0].dx, boundary.points[0].dy);
+      for (int i = 1; i < boundary.points.length; i++) {
+        selectionPath.lineTo(boundary.points[i].dx, boundary.points[i].dy);
+      }
+      canvas.drawPath(selectionPath, selectionPaint);
+
+      // Draw selection points with blue circles
+      final pointPaint = Paint()
+        ..color = Colors.blue
+        ..style = PaintingStyle.fill;
+      final pointStrokePaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2;
+
+      for (final point in boundary.points) {
+        canvas.drawCircle(point, 6, pointPaint);
+        canvas.drawCircle(point, 6, pointStrokePaint);
+      }
+    }
+
     final paint = Paint()
-      ..color = const Color(0xFF6F42C1)
+      ..color = isSelected ? Colors.blue : const Color(0xFF6F42C1)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+      ..strokeWidth = isSelected ? 3 : 2;
 
     final path = Path();
     path.moveTo(boundary.points[0].dx, boundary.points[0].dy);
@@ -439,6 +551,8 @@ class MapPainter extends CustomPainter {
   }
 
   void _drawComment(Canvas canvas, CommentAnnotation comment) {
+    final isSelected = selectedComment?.id == comment.id;
+
     final bubblePaint = Paint()
       ..color = Colors.lightBlue.shade100
       ..style = PaintingStyle.fill;
@@ -455,6 +569,37 @@ class MapPainter extends CustomPainter {
     final height = 28.0;
     final tailSize = 6.0;
     final cornerRadius = 8.0;
+
+    // Draw selection indicator first (so it appears behind the bubble)
+    if (isSelected) {
+      final selectionRect = RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: center,
+          width: width + 12,
+          height: height + 12,
+        ),
+        const Radius.circular(14),
+      );
+
+      // Draw outer glow
+      final glowPaint = Paint()
+        ..color = Colors.blue.withValues(alpha: 0.3)
+        ..style = PaintingStyle.fill;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          selectionRect.outerRect.inflate(2),
+          const Radius.circular(16),
+        ),
+        glowPaint,
+      );
+
+      // Draw selection border
+      final selectionPaint = Paint()
+        ..color = Colors.blue
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3;
+      canvas.drawRRect(selectionRect, selectionPaint);
+    }
 
     // Main rounded rectangle bubble
     final rect = RRect.fromRectAndRadius(
